@@ -2,7 +2,7 @@ import { NotARepoError } from '../core/errors.js';
 import { generateTour, prepareTour } from '../core/tour.js';
 import { CliRenderer } from '../render/cli.js';
 import { writeMaybePaged, writeStdout } from '../render/pager.js';
-import { openSession, terminalWidth, type GlobalFlags } from './shared.js';
+import { openSession, resolveHighlight, terminalWidth, type GlobalFlags } from './shared.js';
 
 export interface TourFlags extends GlobalFlags {
   working?: boolean;
@@ -48,6 +48,8 @@ export async function tourCommand(rangeArg: string | undefined, flags: TourFlags
     width: terminalWidth(config.render.width),
     section: flags.section,
     fromCache: result.fromCache,
+    highlight: resolveHighlight(config.render.highlight, session.colorEnabled),
+    theme: config.render.theme,
   });
   await writeMaybePaged(output, {
     mode: config.render.pager,

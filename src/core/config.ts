@@ -87,6 +87,10 @@ export const ConfigSchema = z.object({
     pager: z.enum(['auto', 'always', 'never']),
     maxExcerptLines: z.number().int().positive(),
     width: z.number().int().positive().nullable(),
+    /** Language-aware token colors in excerpts (needs a 256-color terminal for the add/del tints). */
+    highlight: z.enum(['auto', 'always', 'never']),
+    /** Background tint palette for added/removed lines. */
+    theme: z.enum(['dark', 'light']),
   }),
   cache: z.object({
     enabled: z.boolean(),
@@ -131,7 +135,7 @@ export const DEFAULT_CONFIG: Config = {
       '**/*.map',
     ],
   },
-  render: { color: 'auto', pager: 'auto', maxExcerptLines: 60, width: null },
+  render: { color: 'auto', pager: 'auto', maxExcerptLines: 60, width: null, highlight: 'auto', theme: 'dark' },
   cache: { enabled: true, dir: null },
 };
 

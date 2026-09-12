@@ -1,6 +1,7 @@
 import pc from 'picocolors';
 import { UsageError } from '../core/errors.js';
 import type { Excerpt, Section, Tour, TourSource, TourStats } from '../core/types.js';
+import { highlightCode, languageForPath, lineTint, truncateAnsi, visibleLength as visibleWidth } from './highlight.js';
 import type { Renderer, RenderOptions } from './renderer.js';
 
 type Colors = ReturnType<typeof pc.createColors>;
@@ -13,6 +14,7 @@ export class CliRenderer implements Renderer {
   render(tour: Tour, opts: RenderOptions): string {
     const c = pc.createColors(opts.color);
     const width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, opts.width));
+    const style: ExcerptStyle = { highlight: Boolean(opts.color && opts.highlight), theme: opts.theme ?? 'dark' };
     const out: string[] = [];
 
     out.push(...renderHeader(tour, c, width, opts.fromCache ?? false));
@@ -23,12 +25,12 @@ export class CliRenderer implements Renderer {
       if (!section) {
         throw new UsageError(`No section ${opts.section}; this tour has ${tour.sections.length} section${tour.sections.length === 1 ? '' : 's'}.`);
       }
-      out.push(...renderSection(section, opts.section, tour.sections.length, c, width));
+      out.push(...renderSection(section, opts.section, tour.sections.length, c, width, style));
     } else {
       out.push(...renderToc(tour, c, width));
       out.push('');
       tour.sections.forEach((s, i) => {
-        out.push(...renderSection(s, i + 1, tour.sections.length, c, width));
+        out.push(...renderSection(s, i + 1, tour.sections.length, c, width, style));
         out.push('');
       });
     }
@@ -70,7 +72,12 @@ function renderToc(tour: Tour, c: Colors, width: number): string[] {
   return lines;
 }
 
-function renderSection(s: Section, index: number, count: number, c: Colors, width: number): string[] {
+interface ExcerptStyle {
+  highlight: boolean;
+  theme: 'dark' | 'light';
+}
+
+function renderSection(s: Section, index: number, count: number, c: Colors, width: number, style: ExcerptStyle): string[] {
   const lines: string[] = [];
   lines.push(c.dim('─'.repeat(width)));
   lines.push(c.bold(`${index}. ${s.title}`) + c.dim(`   (${index}/${count})`));
@@ -85,27 +92,48 @@ function renderSection(s: Section, index: number, count: number, c: Colors, widt
   }
   for (const e of s.excerpts) {
     lines.push('');
-    lines.push(...renderExcerpt(e, c, width));
+    lines.push(...renderExcerpt(e, c, width, style));
   }
   return lines;
 }
 
-function renderExcerpt(e: Excerpt, c: Colors, width: number): string[] {
+function renderExcerpt(e: Excerpt, c: Colors, width: number, style: ExcerptStyle): string[] {
   const lines: string[] = [];
   const title = `   ${c.cyan(e.file)}${c.dim(':' + e.newStart)}`;
   lines.push(e.note ? `${title}  ${c.italic(c.dim(e.note))}` : title);
   const maxNo = Math.max(...e.lines.map((l) => Math.max(l.oldNo ?? 0, l.newNo ?? 0)), 1);
   const w = String(maxNo).length;
-  const budget = Math.max(20, width - (3 + w * 2 + 5));
-  for (const l of e.lines) {
+  // gutter = 3 spaces + old + space + new + " │" ; body = sign + text
+  const budget = Math.max(20, width - (3 + w * 2 + 3) - 1);
+  const texts = e.lines.map((l) => expandTabs(l.text));
+
+  const lang = style.highlight ? languageForPath(e.file) : null;
+  const highlighted = lang ? highlightCode(texts.join('\n'), lang, c) : null;
+
+  e.lines.forEach((l, i) => {
     const oldNo = l.oldNo === undefined ? ' '.repeat(w) : String(l.oldNo).padStart(w);
     const newNo = l.newNo === undefined ? ' '.repeat(w) : String(l.newNo).padStart(w);
     const sign = l.type === 'add' ? '+' : l.type === 'del' ? '-' : ' ';
-    const text = truncate(expandTabs(l.text), budget);
     const gutter = c.dim(`   ${oldNo} ${newNo} │`);
-    const body = `${sign}${text}`;
-    lines.push(`${gutter}${l.type === 'add' ? c.green(body) : l.type === 'del' ? c.red(body) : body}`);
-  }
+    const plain = texts[i]!;
+
+    if (!highlighted) {
+      const body = `${sign}${truncate(plain, budget)}`;
+      lines.push(`${gutter}${l.type === 'add' ? c.green(body) : l.type === 'del' ? c.red(body) : body}`);
+      return;
+    }
+
+    // Syntax colors on the text; add/del expressed by a colored sign and a background tint across the row.
+    const text = truncateAnsi(highlighted[i]!, budget);
+    const pad = ' '.repeat(Math.max(0, budget - visibleWidth(text)));
+    if (l.type === 'ctx') {
+      lines.push(`${gutter} ${text}`);
+      return;
+    }
+    const tint = lineTint(l.type, style.theme);
+    const signStyled = l.type === 'add' ? c.green(c.bold('+')) : c.red(c.bold('-'));
+    lines.push(`${gutter}${tint.open}${signStyled}${text}${pad}${tint.close}`);
+  });
   return lines;
 }
 
