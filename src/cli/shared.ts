@@ -56,6 +56,6 @@ export function resolveColor(mode: 'auto' | 'always' | 'never'): boolean {
   return Boolean(process.stdout.isTTY) && process.env.TERM !== 'dumb';
 }
 
-export function terminalWidth(configured: number | null): number {
-  return configured ?? process.stdout.columns ?? 80;
+export function terminalWidth(configured: number | null, stream: { columns?: number } = process.stdout): number {
+  return configured ?? (stream.columns || 80);
 }
