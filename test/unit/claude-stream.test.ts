@@ -14,6 +14,7 @@ describe('ClaudeStreamParser', () => {
       ev({ type: 'message_start', message: { model: 'claude-x' } }) +
       ev({ type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: 'hmm ' } }) +
       ev({ type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: '' } }) +
+      ev({ type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: '' } }) +
       ev({ type: 'content_block_start', content_block: { type: 'tool_use', name: 'StructuredOutput' } }) +
       ev({ type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: '{"title":' } }) +
       ev({ type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: '"t"}' } }) +
@@ -24,6 +25,7 @@ describe('ClaudeStreamParser', () => {
     for (let i = 0; i < stream.length; i += 7) p.push(stream.slice(i, i + 7));
     const out = p.finish();
     expect(events.filter((e) => e.type === 'thinking')).toEqual([{ type: 'thinking', text: 'hmm ' }]);
+    expect(events.filter((e) => e.type === 'thinking-pulse')).toHaveLength(2);
     expect(events.filter((e) => e.type === 'answer-start')).toHaveLength(1);
     expect(events.filter((e) => e.type === 'text').map((e) => (e as { text: string }).text).join('')).toBe('{"title":"t"}');
     expect(events.some((e) => e.type === 'usage' && e.model === 'claude-x')).toBe(true);

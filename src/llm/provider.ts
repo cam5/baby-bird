@@ -1,8 +1,10 @@
 /** Events a provider may emit while a completion is in flight. */
 export type LlmEvent =
   | { type: 'started' }
-  /** A chunk of the model's (summarized) reasoning. */
+  /** A chunk of the model's (summarized) reasoning, when the runner exposes it. */
   | { type: 'thinking'; text: string }
+  /** The model is reasoning but the runner does not expose the text (Claude Code's print mode sends empty deltas). */
+  | { type: 'thinking-pulse' }
   /** A chunk of the answer as it is produced. */
   | { type: 'text'; text: string }
   /** The model started a (new) answer; any previously streamed answer text is superseded. */

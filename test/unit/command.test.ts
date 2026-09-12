@@ -55,6 +55,7 @@ describe('CommandProvider', () => {
     expect(events.filter((e) => e.type === 'thinking').map((e) => (e as { text: string }).text).join('')).toBe(
       'Let me look at the diff. There is one hunk that matters; the tour needs one section.',
     );
+    expect(events.filter((e) => e.type === 'thinking-pulse')).toHaveLength(2);
     expect(events.filter((e) => e.type === 'text').length).toBeGreaterThan(1);
     expect(events.at(-1)).toMatchObject({ type: 'usage', outputTokens: 120, thinkingTokens: 33, costUsd: 0.02, model: 'claude-fake-1' });
     const { readFile } = await import('node:fs/promises');

@@ -111,8 +111,9 @@ export class ClaudeStreamParser {
       }
       case 'content_block_delta': {
         const delta = isObject(event.delta) ? event.delta : {};
-        if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string' && delta.thinking) {
-          this.onEvent({ type: 'thinking', text: delta.thinking });
+        if (delta.type === 'thinking_delta') {
+          const text = typeof delta.thinking === 'string' ? delta.thinking : '';
+          this.onEvent(text ? { type: 'thinking', text } : { type: 'thinking-pulse' });
         } else if (delta.type === 'text_delta' && typeof delta.text === 'string' && delta.text) {
           this.text += delta.text;
           this.onEvent({ type: 'text', text: delta.text });
@@ -146,7 +147,7 @@ export class ClaudeStreamParser {
     for (const block of message.content) {
       if (!isObject(block) || block.type !== 'tool_result' || block.is_error !== true) continue;
       const content = typeof block.content === 'string' ? block.content : JSON.stringify(block.content ?? '');
-      this.onEvent({ type: 'notice', text: `Answer rejected (${content.replace(/^Output does not match required schema:\s*/i, 'schema: ').slice(0, 120)}); the model is retrying` });
+      this.onEvent({ type: 'notice', text: `Answer rejected (${content.replace(/^Output does not match required schema:\s*/i, 'schema: ').slice(0, 300)}); the model is retrying` });
     }
   }
 

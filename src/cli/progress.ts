@@ -33,6 +33,7 @@ export class LiveProgress implements ProgressSink {
   private phaseLabel = '';
   private stage: Stage = 'prep';
   private thinking = '';
+  private pulses = 0;
   private answer = '';
   private titles: string[] = [];
   private notices: string[] = [];
@@ -77,6 +78,7 @@ export class LiveProgress implements ProgressSink {
     if (/^asking/i.test(label)) {
       this.stage = 'thinking';
       this.thinking = '';
+      this.pulses = 0;
       this.answer = '';
       this.titles = [];
       this.notices = [];
@@ -92,6 +94,10 @@ export class LiveProgress implements ProgressSink {
       case 'thinking':
         this.thinking += event.text;
         this.stage = 'thinking'; // thinking after a rejected answer comes back into view
+        break;
+      case 'thinking-pulse':
+        this.pulses++;
+        this.stage = 'thinking';
         break;
       case 'answer-start':
         this.answer = '';
@@ -140,6 +146,11 @@ export class LiveProgress implements ProgressSink {
           const tail = this.thinking.slice(-THINKING_TAIL_CHARS).replace(/\s+/g, ' ').trim();
           const wrapped = wrap(tail, width - 4).slice(-this.windowLines);
           for (const l of wrapped) lines.push(`  ${c.dim('│')} ${c.dim(l)}`);
+        } else if (this.pulses > 0) {
+          // The runner reports reasoning heartbeats without text: show a trail that grows with each one.
+          const room = Math.max(8, width - 16);
+          const n = this.pulses % (room + 1);
+          lines.push(`  ${c.dim('│')} ${c.dim('reasoning')} ${c.magenta('·'.repeat(n))}`);
         }
         break;
       }

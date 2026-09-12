@@ -40,6 +40,18 @@ describe('LiveProgress', () => {
     expect(f.at(-1)).toContain('section.');
   });
 
+  it('shows a growing pulse trail when reasoning heartbeats carry no text', () => {
+    const { p, tick } = make(40);
+    p.phase('Asking claude');
+    tick(3000);
+    for (let i = 0; i < 5; i++) p.llm({ type: 'thinking-pulse' });
+    expect(p.frame()).toEqual(['✢ Hatching… 3s · claude', '  │ reasoning ·····']);
+    for (let i = 0; i < 30; i++) p.llm({ type: 'thinking-pulse' });
+    expect(p.frame()[1]).toBe('  │ reasoning ' + '·'.repeat(35 % 25));
+    p.llm({ type: 'thinking', text: 'real text wins' });
+    expect(p.frame()[1]).toBe('  │ real text wins');
+  });
+
   it('switches to section titles once the answer streams', () => {
     const { p } = make(80);
     p.phase('Asking claude');

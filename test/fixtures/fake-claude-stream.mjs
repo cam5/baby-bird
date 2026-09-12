@@ -20,7 +20,7 @@ const ev = (event) => emit({ type: 'stream_event', event, session_id: 's' });
 emit({ type: 'system', subtype: 'init', session_id: 's', tools: ['StructuredOutput'] });
 ev({ type: 'message_start', message: { model: 'claude-fake-1', role: 'assistant', content: [] } });
 ev({ type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } });
-for (const t of ['Let me look at the diff. ', 'There is one hunk that matters; ', 'the tour needs one section.']) {
+for (const t of ['', '', 'Let me look at the diff. ', 'There is one hunk that matters; ', 'the tour needs one section.']) {
   ev({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: t } });
 }
 ev({ type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: 'sig' } });

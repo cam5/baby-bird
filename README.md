@@ -112,7 +112,9 @@ All keys, with defaults:
 
 ### While it generates
 
-On a terminal, `bb` shows a small live status block on stderr (stdout stays clean for piping): a spinner with the current stage and elapsed time, then, for Claude presets, a rolling window of the model's reasoning as it streams, and finally each section title as the answer takes shape. When the tour lands the block is replaced by one dim summary line (time, tokens, model). Turn it off with `--no-progress`; it is also off when stderr is not a TTY or `--debug` is on.
+On a terminal, `bb` shows a small live status block on stderr (stdout stays clean for piping): a spinner with the current stage and elapsed time, then, for Claude presets, a reasoning indicator, and finally each section title as the answer takes shape. If the CLI rejects an answer against the schema you see that too, and the section list starts over when the model resubmits. When the tour lands the block is replaced by one dim summary line (time, tokens, model). Turn it off with `--no-progress`; it is also off when stderr is not a TTY or `--debug` is on.
+
+About that reasoning indicator: Claude Code's print mode (2.1.x) streams thinking *heartbeats* roughly every second but with empty text, both in the deltas and in the final message, so `bb` shows a pulse trail that grows with each heartbeat rather than the words. The rolling text window is implemented and takes over automatically whenever a runner does include reasoning text.
 
 ### LLM presets
 
