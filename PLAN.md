@@ -179,7 +179,7 @@ Output handling (`json.ts`): `extractJson()` tries whole-stdout parse → fenced
 
 | preset | command |
 |---|---|
-| `claude` (default) | `claude -p --bare --no-session-persistence --tools ""` (your default model) |
+| `claude` (default) | `claude -p --no-session-persistence --setting-sources "" --tools ""` (its default model) |
 | `claude-sonnet` | … `--model sonnet --effort high` |
 | `claude-opus` | … `--model opus --effort high` |
 | `claude-fable` | … `--model fable --effort high` |

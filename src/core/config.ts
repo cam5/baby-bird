@@ -18,13 +18,17 @@ export interface LlmPreset {
   description?: string;
 }
 
-/** Claude Code in print mode, stripped down to behave like a plain completion. */
-const CLAUDE_BASE = ['claude', '-p', '--bare', '--no-session-persistence', '--tools', ''];
+/**
+ * Claude Code in print mode, stripped down to behave like a plain completion:
+ * no tools, no session persistence, and no settings/CLAUDE.md from the cwd.
+ * (--bare would also skip keychain reads, which breaks keychain-based logins.)
+ */
+const CLAUDE_BASE = ['claude', '-p', '--no-session-persistence', '--setting-sources', '', '--tools', ''];
 
 export const BUILTIN_PRESETS: Readonly<Record<string, LlmPreset>> = Object.freeze({
   claude: {
     command: [...CLAUDE_BASE],
-    description: 'Claude Code CLI with your default model',
+    description: 'Claude Code CLI with its default model',
   },
   'claude-sonnet': {
     command: [...CLAUDE_BASE, '--model', 'sonnet', '--effort', 'high'],
