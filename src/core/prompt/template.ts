@@ -1,5 +1,5 @@
 /** Bump whenever the prompt text or its assembly changes materially; it is part of the cache key. */
-export const PROMPT_VERSION = 1;
+export const PROMPT_VERSION = 2;
 
 export const PROMPT_HEADER = `You are writing a guided code tour of a change for a reviewer who has not seen it before.
 
@@ -16,6 +16,7 @@ A code tour is an ordered list of sections. Each section explains one coherent p
 - The tour "title" is a short imperative phrase naming the change, like a good commit subject. The "summary" is 2 to 4 sentences describing the whole change and its motivation.
 - Use the pull request description and commit messages as evidence of intent, but trust the diff over them when they disagree.
 - If parts of the diff were truncated or omitted, still assign those files to sections based on their names and stats, and only reference hunks that were shown.
+- The JSON must be strictly valid. Inside a string, escape double quotes as \\" or use single quotes when mentioning flags, code, or file names.
 
 ## Output
 

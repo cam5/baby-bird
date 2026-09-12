@@ -17,11 +17,49 @@ export function extractJson(text: string): unknown {
   if (first !== -1 && last > first) candidates.push(trimmed.slice(first, last + 1));
 
   for (const c of candidates) {
-    const parsed = tryParse(c);
+    const parsed = tryParse(c) ?? tryParse(repairUnescapedQuotes(c));
     if (parsed === undefined) continue;
     return unwrapEnvelope(parsed);
   }
   throw new BadLlmOutputError('Could not find a JSON object in the model output.', text, 'Run with --debug to see the raw output.');
+}
+
+/**
+ * Escape double quotes that appear inside JSON strings without a backslash, a
+ * common model slip when prose mentions flags like `--tools ""`. A quote is
+ * treated as closing only when the next non-blank character could legally
+ * follow a string (, } ] : or end of input).
+ */
+export function repairUnescapedQuotes(s: string): string {
+  let out = '';
+  let inString = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (!inString) {
+      if (ch === '"') inString = true;
+      out += ch;
+      continue;
+    }
+    if (ch === '\\') {
+      out += ch + (s[i + 1] ?? '');
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < s.length && (s[j] === ' ' || s[j] === '\t' || s[j] === '\r' || s[j] === '\n')) j++;
+      const next = s[j];
+      if (next === undefined || next === ',' || next === '}' || next === ']' || next === ':') {
+        inString = false;
+        out += ch;
+      } else {
+        out += '\\"';
+      }
+      continue;
+    }
+    out += ch;
+  }
+  return out;
 }
 
 function tryParse(s: string): unknown {
