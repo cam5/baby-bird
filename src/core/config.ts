@@ -87,6 +87,8 @@ export const ConfigSchema = z.object({
     command: z.array(z.string()).min(1).nullable(),
     promptVia: PromptViaSchema.nullable(),
     kind: LlmKindSchema.nullable(),
+    /** Claude kind only: pass --json-schema so the CLI validates the answer itself. Off by default (see README). */
+    jsonSchema: z.boolean(),
     timeoutMs: z.number().int().positive(),
     maxPromptBytes: z.number().int().positive(),
     env: z.record(z.string(), z.string()),
@@ -130,6 +132,7 @@ export const DEFAULT_CONFIG: Config = {
     command: null,
     promptVia: null,
     kind: null,
+    jsonSchema: false,
     timeoutMs: 180_000,
     maxPromptBytes: 200_000,
     env: {},
@@ -318,6 +321,8 @@ export interface ResolvedLlm {
   command: string[];
   promptVia: PromptVia;
   kind: LlmKind;
+  /** Whether to hand the answer schema to the runner (Claude kind only). */
+  jsonSchema: boolean;
   /** Preset name, or null when a custom command is in use. */
   preset: string | null;
   timeoutMs: number;
@@ -331,7 +336,7 @@ export function allPresets(config: Config): Record<string, LlmPreset> {
 
 export function resolveLlm(config: Config): ResolvedLlm {
   const { llm } = config;
-  const common = { timeoutMs: llm.timeoutMs, maxPromptBytes: llm.maxPromptBytes, env: llm.env };
+  const common = { timeoutMs: llm.timeoutMs, maxPromptBytes: llm.maxPromptBytes, env: llm.env, jsonSchema: llm.jsonSchema };
 
   if (llm.command) {
     return { command: [...llm.command, ...llm.args], promptVia: llm.promptVia ?? 'stdin', kind: llm.kind ?? 'plain', preset: null, ...common };

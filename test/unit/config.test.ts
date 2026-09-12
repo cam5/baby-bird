@@ -107,6 +107,8 @@ describe('resolveLlm', () => {
     expect(r.command).toEqual(BUILTIN_PRESETS.claude!.command);
     expect(r.promptVia).toBe('stdin');
     expect(r.kind).toBe('claude');
+    expect(r.jsonSchema).toBe(false);
+    expect(resolveLlm(deepMerge(DEFAULT_CONFIG, { llm: { jsonSchema: true } })).jsonSchema).toBe(true);
   });
 
   it('defaults custom commands to the plain kind unless told otherwise', () => {

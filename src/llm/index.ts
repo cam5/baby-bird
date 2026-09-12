@@ -13,7 +13,7 @@ export function createProvider(llm: ResolvedLlm, opts: { cwd?: string; debug?: (
     promptVia: llm.promptVia,
     timeoutMs: llm.timeoutMs,
     kind: llm.kind,
-    jsonSchema: llm.kind === 'claude' ? TOUR_JSON_SCHEMA : undefined,
+    jsonSchema: llm.kind === 'claude' && llm.jsonSchema ? TOUR_JSON_SCHEMA : undefined,
     env: llm.env,
     cwd: opts.cwd,
     debug: opts.debug,

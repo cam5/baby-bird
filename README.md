@@ -94,7 +94,8 @@ All keys, with defaults:
     "args": [],                // extra argv appended to the preset's command
     "command": null,           // a whole custom invocation; when set, "preset" is ignored
     "promptVia": null,         // "stdin" (default) or "arg" (replace {prompt} in argv)
-    "kind": null,              // "claude" (stream thinking + schema-enforced JSON) or "plain"; default from the preset
+    "kind": null,              // "claude" (streams progress from the Claude Code CLI) or "plain"; default from the preset
+    "jsonSchema": false,       // Claude kind: also pass --json-schema so the CLI validates the answer (see below)
     "timeoutMs": 180000,
     "maxPromptBytes": 200000,  // larger diffs are truncated, biggest files first
     "env": {}                  // extra environment for the command
@@ -149,7 +150,9 @@ bb --preset local
 BB_LLM_COMMAND='llm -m gpt-4.1' bb
 ```
 
-Presets have a `kind`. The built-in Claude presets are `"claude"`: `bb` appends `--output-format stream-json --verbose --include-partial-messages` to stream thinking into the status block, and `--json-schema` so the CLI itself guarantees a well-formed answer. Everything else is `"plain"`: stdout is the answer, and `bb` extracts the JSON from it (fences, prose, and the odd unescaped quote are tolerated, with one repair round-trip if needed). Set `"kind": "claude"` on your own preset when it wraps the Claude Code CLI, or `llm.kind` to override for a run.
+Presets have a `kind`. The built-in Claude presets are `"claude"`: `bb` appends `--output-format stream-json --verbose --include-partial-messages` so the status block can show reasoning heartbeats and section titles as they stream; the answer text is then extracted like any other (fences, prose, and the odd unescaped quote are tolerated, with one repair round-trip if needed). Everything else is `"plain"`: stdout is the answer. Set `"kind": "claude"` on your own preset when it wraps the Claude Code CLI, or `llm.kind` to override for a run.
+
+`llm.jsonSchema: true` additionally passes `--json-schema` so the CLI validates the answer itself. It is off by default: on Claude Code 2.1.270 the model's first structured call is rejected about five times in six (it emits tool-call placeholders such as `$PARAMETER_NAME` as top-level keys), and although the CLI makes it retry, every rejection costs a full extra answer. Worth re-checking on newer versions.
 
 The effective command is part of the cache key, so switching presets regenerates the tour instead of reusing another model's.
 
@@ -171,7 +174,7 @@ bb cache path
 
 1. Resolve what to compare (see above) and collect the unified diff, commit subjects, and PR text.
 2. Assemble the prompt: rules, the output contract, a file table, and the diff with every hunk labeled `[F3.H2]`. Over-budget prompts are shortened biggest-file-first.
-3. Run the LLM command. The model returns sections that *reference* hunks by id; it never reproduces code. Claude presets stream their reasoning into the status block and are held to a JSON schema by the CLI; for other commands, if the reply isn't valid JSON for the schema, one repair round-trip is attempted.
+3. Run the LLM command. The model returns sections that *reference* hunks by id; it never reproduces code. If the reply isn't valid JSON for the schema, one repair round-trip is attempted.
 4. Materialize: excerpts are sliced from the real diff, counts are computed locally, and any file the model did not mention lands in a final "Other changes" section.
 5. Cache and render.
 
