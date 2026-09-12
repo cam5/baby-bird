@@ -17,8 +17,8 @@
     "code-tour"
   ],
   "bin": {
-    "bb": "./dist/cli.js",
-    "baby-bird": "./dist/cli.js"
+    "bb": "dist/cli.js",
+    "baby-bird": "dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
