@@ -1,5 +1,5 @@
 {
-  "name": "baby-bird",
+  "name": "@cam5/baby-bird",
   "version": "0.1.0",
   "description": "Guided code tours for git changes, on the command line.",
   "license": "MIT",
@@ -55,5 +55,8 @@
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
     "vitest": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

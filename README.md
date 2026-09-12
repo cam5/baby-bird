@@ -39,7 +39,7 @@ Contents
 ## Install
 
 ```sh
-pnpm add -g baby-bird     # or: npm i -g baby-bird
+pnpm add -g @cam5/baby-bird     # or: npm i -g @cam5/baby-bird
 bb --help
 ```
 
@@ -169,7 +169,7 @@ bb cache path
 
 ## Using it as a library
 
-The CLI is one consumer of a small core. `import { generateTour, CliRenderer, type Tour } from 'baby-bird'` gives you the same pipeline for a TUI, a web view, or a bot; a `Tour` is plain JSON (sections, stats, excerpts) with no git or LLM dependencies.
+The CLI is one consumer of a small core. `import { generateTour, CliRenderer, type Tour } from '@cam5/baby-bird'` gives you the same pipeline for a TUI, a web view, or a bot; a `Tour` is plain JSON (sections, stats, excerpts) with no git or LLM dependencies.
 
 ## Development
 
