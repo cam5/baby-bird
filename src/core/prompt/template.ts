@@ -1,5 +1,5 @@
 /** Bump whenever the prompt text or its assembly changes materially; it is part of the cache key. */
-export const PROMPT_VERSION = 2;
+export const PROMPT_VERSION = 3;
 
 export const PROMPT_HEADER = `You are writing a guided code tour of a change for a reviewer who has not seen it before.
 
@@ -11,7 +11,7 @@ A code tour is an ordered list of sections. Each section explains one coherent p
 - Group by concept, not by file. A section may span many files, and a file may appear in several sections.
 - Every file in the change must be claimed by at least one section. Put unrelated housekeeping (formatting, generated code, renames, dependency bumps) in one short final section rather than sprinkling it around.
 - A section's description is 2 to 5 sentences of plain prose written for a colleague. Lead with the purpose (why), then what changed, then anything a reviewer should look at carefully: behavior changes, edge cases, risk. Do not narrate line by line and do not restate the diff.
-- Choose 1 to 3 excerpts per section: the hunks that best show the idea. Reference hunks by their id exactly as given (for example "F2.H1"). Optionally narrow a hunk with "lines": [start, end] using NEW-file line numbers as they appear in the diff. Never quote code in the JSON; the real diff is rendered from your references.
+- Choose 1 to 3 excerpts per section: the hunks that best show the idea. Reference hunks by their id exactly as given (for example "F2.H1"). Narrow a hunk to the interesting part with "lines": [start, end] using NEW-file line numbers as they appear in the diff; prefer 10 to 30 lines over a whole hunk. Use an empty "lines" array for the whole hunk. Never quote code in the JSON; the real diff is rendered from your references.
 - Give each excerpt a short "note" (under 15 words) saying what to look at.
 - The tour "title" is a short imperative phrase naming the change, like a good commit subject. The "summary" is 2 to 4 sentences describing the whole change and its motivation.
 - Use the pull request description and commit messages as evidence of intent, but trust the diff over them when they disagree.

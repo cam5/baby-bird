@@ -49,7 +49,8 @@ export function materializeTour(input: MaterializeInput): Tour {
         continue;
       }
       files.add(hit.file.path);
-      const lines = sliceHunk(hit.hunk, ref.lines, input.maxExcerptLines);
+      const range = ref.lines && ref.lines.length >= 2 ? ([ref.lines[0]!, ref.lines[1]!] as [number, number]) : undefined;
+      const lines = sliceHunk(hit.hunk, range, input.maxExcerptLines);
       const excerpt: Excerpt = {
         file: hit.file.path,
         hunkId: hit.hunk.id,
