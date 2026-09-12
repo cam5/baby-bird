@@ -3,3 +3,6 @@ dist/
 coverage/
 *.tgz
 .DS_Store
+
+# Worktrees created by Claude Code sessions
+.claude/worktrees/

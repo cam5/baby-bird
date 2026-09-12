@@ -13,7 +13,7 @@ export async function writeMaybePaged(output: string, opts: PagerOptions): Promi
   const lineCount = output.split('\n').length;
   const shouldPage = opts.mode === 'always' || (opts.mode === 'auto' && opts.isTTY && lineCount > opts.rows - 1);
   if (!shouldPage) {
-    process.stdout.write(output);
+    await writeStdout(output);
     return;
   }
   const pagerCmd = (env.PAGER && env.PAGER.trim()) || 'less';
@@ -31,5 +31,12 @@ export async function writeMaybePaged(output: string, opts: PagerOptions): Promi
     });
     child.stdin.on('error', () => {}); // pager quit early
     child.stdin.end(output);
+  });
+}
+
+/** Write to stdout and resolve once the bytes are flushed (or the pipe is gone). */
+export function writeStdout(output: string): Promise<void> {
+  return new Promise((resolve) => {
+    process.stdout.write(output, () => resolve());
   });
 }

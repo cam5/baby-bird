@@ -23,6 +23,12 @@ function addGlobalFlags(cmd: Command): Command {
     .option('--debug', 'print diagnostics (resolved range, prompt size, raw model output) to stderr');
 }
 
+// A reader that quits early (`bb | head`) is a normal end, not a crash.
+process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') process.exit(0);
+  throw err;
+});
+
 const program = new Command();
 
 program

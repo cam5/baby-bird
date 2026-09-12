@@ -1,7 +1,7 @@
 import { NotARepoError } from '../core/errors.js';
 import { generateTour, prepareTour } from '../core/tour.js';
 import { CliRenderer } from '../render/cli.js';
-import { writeMaybePaged } from '../render/pager.js';
+import { writeMaybePaged, writeStdout } from '../render/pager.js';
 import { openSession, terminalWidth, type GlobalFlags } from './shared.js';
 
 export interface TourFlags extends GlobalFlags {
@@ -31,14 +31,14 @@ export async function tourCommand(rangeArg: string | undefined, flags: TourFlags
 
   const prepared = await prepareTour(options);
   if (flags.dumpPrompt) {
-    process.stdout.write(prepared.built.prompt.endsWith('\n') ? prepared.built.prompt : prepared.built.prompt + '\n');
+    await writeStdout(prepared.built.prompt.endsWith('\n') ? prepared.built.prompt : prepared.built.prompt + '\n');
     return;
   }
 
   const result = await generateTour(options, prepared);
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(result.tour, null, 2) + '\n');
+    await writeStdout(JSON.stringify(result.tour, null, 2) + '\n');
     return;
   }
 
