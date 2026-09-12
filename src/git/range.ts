@@ -35,6 +35,7 @@ export async function resolveRange(req: RangeRequest, opts: ResolveOptions): Pro
   if (!headSha) {
     throw new NoChangesError('This repository has no commits yet.', 'Make an initial commit first.');
   }
+  debug(`repository ${cwd} on ${branch ?? 'detached HEAD'} at ${headSha.slice(0, 12)}`);
 
   if (req.working && req.staged) throw new UsageError('--working and --staged are mutually exclusive.');
   if ((req.working || req.staged) && req.arg) throw new UsageError(`A range argument cannot be combined with --${req.working ? 'working' : 'staged'}.`);
@@ -86,7 +87,7 @@ export async function resolveRange(req: RangeRequest, opts: ResolveOptions): Pro
   }
 
   throw new NoChangesError(
-    onDefault ? `You're on ${branch} with a clean working tree; nothing to tour.` : 'Could not infer what to compare against.',
+    onDefault ? `You're on ${branch} in ${cwd} with a clean working tree; nothing to tour.` : 'Could not infer what to compare against.',
     'Pass a range explicitly, e.g. `bb HEAD~3`, `bb main..feature` or `bb --working`.',
   );
 }
