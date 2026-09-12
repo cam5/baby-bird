@@ -6,7 +6,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cam5/baby-bird.git"
+    "url": "git+https://github.com/cam5/baby-bird.git"
   },
   "keywords": [
     "git",
@@ -35,6 +35,7 @@
   "engines": {
     "node": ">=22"
   },
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "tsx src/cli/main.ts",
     "build": "tsup",

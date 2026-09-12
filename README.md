@@ -181,6 +181,15 @@ pnpm typecheck
 pnpm build             # dist/ via tsup
 ```
 
+## Releasing
+
+Releases are cut by pushing a version tag. The `release` workflow checks that the tag matches `package.json`, runs typecheck, tests and build, publishes to npm with provenance (via npm trusted publishing, so no token is stored), and creates a GitHub Release with generated notes.
+
+```sh
+npm version patch        # or minor / major: bumps package.json, commits, tags vX.Y.Z
+git push --follow-tags
+```
+
 ## Exit codes
 
 | code | meaning |
