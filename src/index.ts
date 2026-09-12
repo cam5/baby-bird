@@ -27,7 +27,7 @@ export { TourCache, type CacheEntry } from './core/cache.js';
 export { extractJson } from './core/json.js';
 export { materializeTour, sliceHunk, OTHER_CHANGES_TITLE } from './core/materialize.js';
 export { buildPrompt, describeSource, type BuiltPrompt, type PromptInput, type TruncationReport } from './core/prompt/build.js';
-export { PROMPT_VERSION } from './core/prompt/template.js';
+export { PROMPT_VERSION, promptHeader } from './core/prompt/template.js';
 export { generateTour, prepareTour, type PreparedTour, type TourOptions, type TourResult } from './core/tour.js';
 export { collectCommits, collectDiff } from './git/diff.js';
 export { currentBranch, gitRoot, revParse } from './git/exec.js';

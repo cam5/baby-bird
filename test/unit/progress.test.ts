@@ -50,6 +50,25 @@ describe('LiveProgress', () => {
     expect(f.slice(1)).toEqual(['  🐣 Add widgets', '  ✓ The "widget" type', '  ✓ Wiring']);
   });
 
+  it('resets titles on a new answer, shows notices, and returns to the thinking view for late reasoning', () => {
+    const { p } = make(80);
+    p.phase('Asking claude');
+    p.llm({ type: 'answer-start' });
+    p.llm({ type: 'text', text: '{"sections": {"title": "wrong"' });
+    expect(p.frame()[0]).toContain('Writing the tour');
+    p.llm({ type: 'notice', text: 'Answer rejected (schema: /sections: must be array); the model is retrying' });
+    p.llm({ type: 'thinking', text: 'Oops, the shape was wrong. Let me resubmit.' });
+    let f = p.frame();
+    expect(f[0]).toContain('Hatching');
+    expect(f[1]).toBe('  ↻ Answer rejected (schema: /sections: must be array); the model is retrying');
+    expect(f[2]).toContain('resubmit');
+    p.llm({ type: 'answer-start' });
+    p.llm({ type: 'text', text: '{"title": "Right", "sections": [{"title": "One"}]}' });
+    f = p.frame();
+    expect(f[0]).toBe('✢ Writing the tour… 0s · 1 section so far');
+    expect(f.slice(1)).toEqual(['  ↻ Answer rejected (schema: /sections: must be array); the model is retrying', '  🐣 Right', '  ✓ One']);
+  });
+
   it('shows byte progress for opaque commands', () => {
     const { p } = make();
     p.phase('Asking llm');

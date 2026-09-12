@@ -22,7 +22,7 @@ export async function tourCommand(rangeArg: string | undefined, flags: TourFlags
 
   const live = flags.progress !== false && !flags.debug && Boolean(process.stderr.isTTY) && !flags.dumpPrompt;
   const progress = live
-    ? new LiveProgress(process.stderr, { color: session.colorEnabled, width: process.stderr.columns ?? 80 })
+    ? new LiveProgress(process.stderr, { color: session.colorEnabled, width: terminalWidth(null, process.stderr) })
     : loggingProgress(session.debug);
 
   const options = {

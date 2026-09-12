@@ -5,6 +5,7 @@
  */
 export const TOUR_JSON_SCHEMA = {
   type: 'object',
+  description: 'The tour itself. Its fields (title, summary, sections) are the top-level properties of this object; do not wrap them in another key.',
   additionalProperties: false,
   required: ['title', 'summary', 'sections'],
   properties: {

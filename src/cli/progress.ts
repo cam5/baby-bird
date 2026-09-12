@@ -35,6 +35,7 @@ export class LiveProgress implements ProgressSink {
   private thinking = '';
   private answer = '';
   private titles: string[] = [];
+  private notices: string[] = [];
   private outputBytes = 0;
   private usage: Usage = {};
   private readonly startedAt: number;
@@ -78,6 +79,7 @@ export class LiveProgress implements ProgressSink {
       this.thinking = '';
       this.answer = '';
       this.titles = [];
+      this.notices = [];
       this.outputBytes = 0;
     } else if (this.stage !== 'prep') {
       this.stage = 'prep';
@@ -89,6 +91,14 @@ export class LiveProgress implements ProgressSink {
     switch (event.type) {
       case 'thinking':
         this.thinking += event.text;
+        this.stage = 'thinking'; // thinking after a rejected answer comes back into view
+        break;
+      case 'answer-start':
+        this.answer = '';
+        this.titles = [];
+        break;
+      case 'notice':
+        this.notices.push(event.text);
         break;
       case 'text':
         this.answer += event.text;
@@ -125,6 +135,7 @@ export class LiveProgress implements ProgressSink {
       case 'thinking': {
         const meta = [elapsed, this.phaseLabel.replace(/^asking\s+/i, '')].filter(Boolean).join(' · ');
         lines.push(`${spin} ${this.verb}… ${c.dim(meta)}`);
+        for (const n of this.notices.slice(-1)) lines.push(`  ${c.yellow('↻')} ${c.yellow(fit(n).slice(0, width - 4))}`);
         if (this.thinking) {
           const tail = this.thinking.slice(-THINKING_TAIL_CHARS).replace(/\s+/g, ' ').trim();
           const wrapped = wrap(tail, width - 4).slice(-this.windowLines);
@@ -135,6 +146,7 @@ export class LiveProgress implements ProgressSink {
       case 'writing': {
         const n = Math.max(0, this.titles.length - 1);
         lines.push(`${spin} Writing the tour… ${c.dim(`${elapsed} · ${n} section${n === 1 ? '' : 's'} so far`)}`);
+        for (const note of this.notices.slice(-1)) lines.push(`  ${c.yellow('↻')} ${c.yellow(fit(note).slice(0, width - 4))}`);
         const [tourTitle, ...sections] = this.titles;
         const items: string[] = [];
         if (tourTitle) items.push(`  🐣 ${c.bold(fit(tourTitle).slice(0, width - 6))}`);

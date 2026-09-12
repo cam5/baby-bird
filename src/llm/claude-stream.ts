@@ -78,6 +78,9 @@ export class ClaudeStreamParser {
       case 'assistant':
         if (isObject(ev.message)) this.handleAssistant(ev.message);
         break;
+      case 'user':
+        if (isObject(ev.message)) this.handleUser(ev.message);
+        break;
       case 'result':
         this.handleResult(ev);
         break;
@@ -93,6 +96,16 @@ export class ClaudeStreamParser {
         if (model) {
           this.usage.model = model;
           this.onEvent({ type: 'usage', model });
+        }
+        break;
+      }
+      case 'content_block_start': {
+        const block = isObject(event.content_block) ? event.content_block : {};
+        if (block.type === 'text' || block.type === 'tool_use') {
+          // A fresh answer supersedes anything streamed before (e.g. after a schema rejection).
+          this.text = '';
+          this.partialJson = '';
+          this.onEvent({ type: 'answer-start' });
         }
         break;
       }
@@ -124,6 +137,16 @@ export class ClaudeStreamParser {
       if (isObject(block) && block.type === 'tool_use' && isObject(block.input)) {
         this.messageStructured = JSON.stringify(block.input);
       }
+    }
+  }
+
+  /** Tool results the CLI feeds back, e.g. a structured-output validation failure. */
+  private handleUser(message: Json): void {
+    if (!Array.isArray(message.content)) return;
+    for (const block of message.content) {
+      if (!isObject(block) || block.type !== 'tool_result' || block.is_error !== true) continue;
+      const content = typeof block.content === 'string' ? block.content : JSON.stringify(block.content ?? '');
+      this.onEvent({ type: 'notice', text: `Answer rejected (${content.replace(/^Output does not match required schema:\s*/i, 'schema: ').slice(0, 120)}); the model is retrying` });
     }
   }
 

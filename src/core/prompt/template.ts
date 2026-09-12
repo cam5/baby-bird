@@ -1,7 +1,7 @@
 /** Bump whenever the prompt text or its assembly changes materially; it is part of the cache key. */
 export const PROMPT_VERSION = 3;
 
-export const PROMPT_HEADER = `You are writing a guided code tour of a change for a reviewer who has not seen it before.
+export const PROMPT_HEADER_TEXT = `You are writing a guided code tour of a change for a reviewer who has not seen it before.
 
 A code tour is an ordered list of sections. Each section explains one coherent part of the change: what it does, why it is there, and how it connects to the rest. Sections are ordered the way a reader should encounter them: start with the change that makes everything else make sense (a new type, an interface, a data model, a configuration knob), then the code that builds on it, then wiring and plumbing, then tests and housekeeping.
 
@@ -20,7 +20,7 @@ A code tour is an ordered list of sections. Each section explains one coherent p
 
 ## Output
 
-Respond with ONLY a JSON object: no prose before or after it, and no code fences.
+%%OUTPUT_INSTRUCTION%%
 
 {
   "title": "Short imperative title",
@@ -38,6 +38,18 @@ Respond with ONLY a JSON object: no prose before or after it, and no code fences
   ]
 }
 `;
+
+const OUTPUT_PLAIN = 'Respond with ONLY a JSON object: no prose before or after it, and no code fences.';
+const OUTPUT_STRUCTURED =
+  'Submit the tour through the structured output tool. Its input is the tour object itself, with title, summary and sections as top-level fields exactly as shown below (do not nest them under another key). Do not write prose before it.';
+
+/** The fixed part of the prompt; `structured` picks the wording for CLIs that enforce a schema themselves. */
+export function promptHeader(structured: boolean): string {
+  return PROMPT_HEADER_TEXT.replace('%%OUTPUT_INSTRUCTION%%', structured ? OUTPUT_STRUCTURED : OUTPUT_PLAIN);
+}
+
+/** Plain-output header, kept for callers that only need the default wording. */
+export const PROMPT_HEADER = promptHeader(false);
 
 export const REPAIR_SUFFIX = (reason: string) => `
 

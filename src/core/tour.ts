@@ -78,7 +78,7 @@ export async function prepareTour(opts: TourOptions): Promise<PreparedTour> {
   if (resolved.pullRequest) context.pullRequest = resolved.pullRequest;
 
   progress.phase('Building the prompt');
-  const built = buildPrompt({ ...context, maxBytes: llm.maxPromptBytes });
+  const built = buildPrompt({ ...context, maxBytes: llm.maxPromptBytes, structured: llm.kind === 'claude' });
   if (built.truncation.truncated.length || built.truncation.omitted.length) {
     warn(`Prompt exceeded ${llm.maxPromptBytes} bytes; truncated ${built.truncation.truncated.length} and omitted ${built.truncation.omitted.length} file diff(s).`);
   }
