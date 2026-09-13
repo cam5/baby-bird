@@ -4,7 +4,7 @@ import type { LlmEvent } from '../llm/provider.js';
 import { wrap } from '../render/cli.js';
 
 const SPINNER = ['✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳'];
-const VERBS = ['Hatching', 'Pecking', 'Nesting', 'Chirping', 'Preening', 'Fledging', 'Brooding', 'Warbling', 'Peeping'];
+const VERBS = ['Hatching', 'Pecking', 'Nesting', 'Chirping', 'Preening', 'Fledging', 'Brooding', 'Warbling', 'Peeping', 'Squawking', 'Swooping', 'Tweeting', 'Xeeting', 'Cawing', 'Twiddling About', 'Hopping', '🐥-ing', '🐣-ing', 'Masticating'];
 const THINKING_TAIL_CHARS = 2000;
 const VERB_INTERVAL_MS = 7500;
 
