@@ -11,10 +11,18 @@ import { formatIssues } from './schema.js';
 
 export type PromptVia = 'stdin' | 'arg';
 
+export type LlmKind = 'plain' | 'claude';
+
 export interface LlmPreset {
   /** argv; when promptVia is "arg", any "{prompt}" token is replaced with the prompt. */
   command: string[];
   promptVia?: PromptVia;
+  /**
+   * "claude": the Claude Code CLI; streaming flags and --json-schema are added
+   * automatically so thinking can be shown live and the answer is schema-checked.
+   * "plain" (default): stdout is the answer.
+   */
+  kind?: LlmKind;
   description?: string;
 }
 
@@ -28,22 +36,27 @@ const CLAUDE_BASE = ['claude', '-p', '--no-session-persistence', '--setting-sour
 export const BUILTIN_PRESETS: Readonly<Record<string, LlmPreset>> = Object.freeze({
   claude: {
     command: [...CLAUDE_BASE],
+    kind: 'claude',
     description: 'Claude Code CLI with its default model',
   },
   'claude-sonnet': {
     command: [...CLAUDE_BASE, '--model', 'sonnet', '--effort', 'high'],
+    kind: 'claude',
     description: 'Claude Code CLI, Sonnet at high effort',
   },
   'claude-opus': {
     command: [...CLAUDE_BASE, '--model', 'opus', '--effort', 'high'],
+    kind: 'claude',
     description: 'Claude Code CLI, Opus at high effort',
   },
   'claude-fable': {
     command: [...CLAUDE_BASE, '--model', 'fable', '--effort', 'high'],
+    kind: 'claude',
     description: 'Claude Code CLI, Fable at high effort',
   },
   'claude-haiku': {
     command: [...CLAUDE_BASE, '--model', 'haiku'],
+    kind: 'claude',
     description: 'Claude Code CLI, Haiku (fast and cheap)',
   },
   llm: {
@@ -57,10 +70,12 @@ export const BUILTIN_PRESETS: Readonly<Record<string, LlmPreset>> = Object.freez
 // ---------------------------------------------------------------------------
 
 const PromptViaSchema = z.enum(['stdin', 'arg']);
+const LlmKindSchema = z.enum(['plain', 'claude']);
 
 export const LlmPresetSchema = z.object({
   command: z.array(z.string()).min(1),
   promptVia: PromptViaSchema.optional(),
+  kind: LlmKindSchema.optional(),
   description: z.string().optional(),
 });
 
@@ -71,6 +86,9 @@ export const ConfigSchema = z.object({
     args: z.array(z.string()),
     command: z.array(z.string()).min(1).nullable(),
     promptVia: PromptViaSchema.nullable(),
+    kind: LlmKindSchema.nullable(),
+    /** Claude kind only: pass --json-schema so the CLI validates the answer itself. Off by default (see README). */
+    jsonSchema: z.boolean(),
     timeoutMs: z.number().int().positive(),
     maxPromptBytes: z.number().int().positive(),
     env: z.record(z.string(), z.string()),
@@ -113,6 +131,8 @@ export const DEFAULT_CONFIG: Config = {
     args: [],
     command: null,
     promptVia: null,
+    kind: null,
+    jsonSchema: false,
     timeoutMs: 180_000,
     maxPromptBytes: 200_000,
     env: {},
@@ -300,6 +320,9 @@ export async function loadConfig(opts: LoadConfigOptions = {}): Promise<LoadedCo
 export interface ResolvedLlm {
   command: string[];
   promptVia: PromptVia;
+  kind: LlmKind;
+  /** Whether to hand the answer schema to the runner (Claude kind only). */
+  jsonSchema: boolean;
   /** Preset name, or null when a custom command is in use. */
   preset: string | null;
   timeoutMs: number;
@@ -313,10 +336,10 @@ export function allPresets(config: Config): Record<string, LlmPreset> {
 
 export function resolveLlm(config: Config): ResolvedLlm {
   const { llm } = config;
-  const common = { timeoutMs: llm.timeoutMs, maxPromptBytes: llm.maxPromptBytes, env: llm.env };
+  const common = { timeoutMs: llm.timeoutMs, maxPromptBytes: llm.maxPromptBytes, env: llm.env, jsonSchema: llm.jsonSchema };
 
   if (llm.command) {
-    return { command: [...llm.command, ...llm.args], promptVia: llm.promptVia ?? 'stdin', preset: null, ...common };
+    return { command: [...llm.command, ...llm.args], promptVia: llm.promptVia ?? 'stdin', kind: llm.kind ?? 'plain', preset: null, ...common };
   }
 
   const presets = allPresets(config);
@@ -328,6 +351,7 @@ export function resolveLlm(config: Config): ResolvedLlm {
   return {
     command: [...preset.command, ...llm.args],
     promptVia: llm.promptVia ?? preset.promptVia ?? 'stdin',
+    kind: llm.kind ?? preset.kind ?? 'plain',
     preset: llm.preset,
     ...common,
   };

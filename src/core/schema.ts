@@ -3,8 +3,8 @@ import { z } from 'zod';
 /** What the model must return. Excerpts are references into the diff we sent. */
 export const LlmExcerptRefSchema = z.object({
   hunk: z.string().min(1),
-  /** Optional [start, end] range of new-file line numbers to narrow the hunk. */
-  lines: z.tuple([z.number().int().nonnegative(), z.number().int().nonnegative()]).optional(),
+  /** Optional [start, end] new-file line numbers to narrow the hunk; fewer than two numbers means the whole hunk. */
+  lines: z.array(z.number().int().nonnegative()).optional(),
   note: z.string().optional(),
 });
 

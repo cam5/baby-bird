@@ -106,6 +106,15 @@ describe('resolveLlm', () => {
     expect(r.preset).toBe('claude');
     expect(r.command).toEqual(BUILTIN_PRESETS.claude!.command);
     expect(r.promptVia).toBe('stdin');
+    expect(r.kind).toBe('claude');
+    expect(r.jsonSchema).toBe(false);
+    expect(resolveLlm(deepMerge(DEFAULT_CONFIG, { llm: { jsonSchema: true } })).jsonSchema).toBe(true);
+  });
+
+  it('defaults custom commands to the plain kind unless told otherwise', () => {
+    expect(resolveLlm(deepMerge(DEFAULT_CONFIG, { llm: { command: ['my-llm'] } })).kind).toBe('plain');
+    expect(resolveLlm(deepMerge(DEFAULT_CONFIG, { llm: { command: ['my-claude'], kind: 'claude' } })).kind).toBe('claude');
+    expect(resolveLlm(deepMerge(DEFAULT_CONFIG, { llm: { preset: 'claude-sonnet', kind: 'plain' } })).kind).toBe('plain');
   });
 
   it('appends args to a built-in preset', () => {

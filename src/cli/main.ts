@@ -48,6 +48,7 @@ addGlobalFlags(program)
   .option('--refresh', 'ignore a cached tour and regenerate it')
   .option('--no-cache', 'neither read nor write the tour cache')
   .option('--no-pager', 'never pipe output through a pager')
+  .option('--no-progress', 'do not show the live status block while generating')
   .addHelpText(
     'after',
     `
