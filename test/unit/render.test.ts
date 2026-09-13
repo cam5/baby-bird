@@ -60,31 +60,27 @@ describe('CliRenderer', () => {
     expect(out).not.toContain('\x1b[48;5;'); // no tints unless highlight is on
   });
 
-  it('layers syntax colors under add/del row tints when highlighting', () => {
-    const out = new CliRenderer().render(tour, { color: true, width: 80, highlight: true, theme: 'dark' });
+  it('layers syntax colors with a colored (non-bold) add/del sign when highlighting, no row background', () => {
+    const out = new CliRenderer().render(tour, { color: true, width: 80, highlight: true });
     const rows = out.split('\n').filter((l) => l.includes('│'));
     expect(rows).toHaveLength(4);
-    const [ctx, del, add1, add2] = rows as [string, string, string, string];
-    expect(ctx).not.toContain('\x1b[48;5;');
+    const [ctx, del, add1] = rows as [string, string, string, string];
+    expect(out).not.toContain('\x1b[48;5;'); // no 256-color backgrounds anywhere
     expect(ctx).toContain('\x1b[35mexport'); // keyword colored
-    expect(del).toContain('\x1b[48;5;52m');
-    expect(del).toContain('\x1b[31m\x1b[1m-');
-    expect(add1).toContain('\x1b[48;5;22m');
-    expect(add1).toContain('\x1b[32m\x1b[1m+');
-    expect(add1.endsWith('\x1b[49m')).toBe(true);
-    // tinted rows are padded to the same visible width
-    const vis = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '').length;
-    expect(vis(add1)).toBe(vis(add2));
-    expect(vis(del)).toBe(vis(add1));
+    // no bold on the sign: some terminals render bold + a base color via their bright palette slot
+    expect(del).toContain('\x1b[31m-');
+    expect(del).not.toContain('\x1b[1m');
+    expect(add1).toContain('\x1b[32m+');
+    expect(add1).not.toContain('\x1b[1m');
     // visible text is unchanged
     expect(out.replace(/\x1b\[[0-9;]*m/g, '')).toContain('      12 │+    size: number;');
   });
 
-  it('falls back to plain coloring for files without a known language', () => {
+  it('falls back to plain text with a colored add/del sign for files without a known language', () => {
     const t = { ...tour, sections: [{ ...tour.sections[0]!, excerpts: [{ ...tour.sections[0]!.excerpts[0]!, file: 'notes.unknown' }] }] };
     const out = new CliRenderer().render(t, { color: true, width: 80, highlight: true });
     expect(out).not.toContain('\x1b[48;5;');
-    expect(out).toContain('\x1b[32m+  name: string;');
+    expect(out).toContain('\x1b[32m+\x1b[39m  name: string;');
   });
 
   it('renders a single section and rejects a bad index', () => {

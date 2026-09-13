@@ -130,8 +130,7 @@ All keys, with defaults:
   },
   "render": {
     "color": "auto", "pager": "auto", "maxExcerptLines": 60, "width": null,
-    "highlight": "auto",       // syntax colors in excerpts on 256-color terminals; "always" | "never"
-    "theme": "dark"            // background tint palette for added/removed lines; "light" for light terminals
+    "highlight": "auto"        // syntax colors in excerpts; "always" | "never"
   },
   "cache":  { "enabled": true, "dir": null }  // default $XDG_CACHE_HOME/baby-bird
 }
@@ -192,7 +191,7 @@ The effective command is part of the cache key, so switching presets regenerates
 
 ### Excerpt highlighting
 
-On a 256-color terminal, excerpts get language-aware token colors (keywords, strings, comments) chosen by file extension, and added/removed lines are marked by a bold `+`/`-` sign plus a subtle green/red row tint underneath, so both signals read at once. The token palette never uses green or red. Turn it off with `--no-highlight` or `render.highlight: "never"`, and pick `--theme light` (or `render.theme`) on a light terminal background. Files with no known language keep the plain green/red rendering.
+Excerpts get language-aware token colors (keywords, strings, comments) chosen by file extension, and added/removed lines are always marked by a green/red `+`/`-` sign — no row background and no bold (some terminal themes render bold color via a washed-out "bright" palette slot), so it reads well on any terminal theme. The token palette never uses green or red, so the sign stays unambiguous. Turn syntax coloring off with `--no-highlight` or `render.highlight: "never"`; files with no known language keep the same green/red sign with plain text.
 
 ### Code host
 

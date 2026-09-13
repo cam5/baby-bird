@@ -56,11 +56,7 @@ addGlobalFlags(program)
   .option('--refresh', 'ignore a cached tour and regenerate it')
   .option('--no-cache', 'neither read nor write the tour cache')
   .option('--no-pager', 'never pipe output through a pager')
-  .option('--no-highlight', 'plain green/red excerpts instead of syntax colors with tinted rows')
-  .option('--theme <name>', 'background tint palette for added/removed lines: dark or light', (v: string) => {
-    if (v !== 'dark' && v !== 'light') throw new InvalidArgumentError('must be dark or light');
-    return v;
-  })
+  .option('--no-highlight', 'plain excerpts with green/red +/- signs instead of syntax colors')
   .option('--no-progress', 'do not show the live status block while generating')
   .addHelpText(
     'after',

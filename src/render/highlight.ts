@@ -143,14 +143,3 @@ export function truncateAnsi(s: string, max: number): string {
   return out + SOFT_RESET + '…';
 }
 
-/** 256-color background tints for added / removed lines. */
-export function lineTint(type: 'add' | 'del', theme: 'dark' | 'light'): { open: string; close: string } {
-  const code = theme === 'dark' ? (type === 'add' ? 22 : 52) : type === 'add' ? 194 : 224;
-  return { open: `\x1b[48;5;${code}m`, close: '\x1b[49m' };
-}
-
-/** Whether the terminal very likely renders 256 colors (needed for the tints). */
-export function supports256Colors(env: NodeJS.ProcessEnv = process.env): boolean {
-  if (env.TERM === 'dumb') return false;
-  return Boolean(env.COLORTERM) || /256color|truecolor|direct/i.test(env.TERM ?? '') || Boolean(env.TERM_PROGRAM) || Boolean(env.WT_SESSION);
-}

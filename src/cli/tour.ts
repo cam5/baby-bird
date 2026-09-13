@@ -64,7 +64,6 @@ export async function tourCommand(rangeArg: string | undefined, flags: TourFlags
     section: flags.section,
     fromCache: result.fromCache,
     highlight: resolveHighlight(config.render.highlight, session.colorEnabled),
-    theme: config.render.theme,
   });
   await writeMaybePaged(output, {
     mode: config.render.pager,

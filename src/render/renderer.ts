@@ -9,10 +9,8 @@ export interface RenderOptions {
   section?: number;
   /** Whether the tour came from the cache, for the header note. */
   fromCache?: boolean;
-  /** Language-aware token colors in excerpts, layered under add/del background tints. Needs color. */
+  /** Language-aware token colors in excerpts. Needs color. */
   highlight?: boolean;
-  /** Which background tints to use for added/removed lines. */
-  theme?: 'dark' | 'light';
 }
 
 export interface Renderer {

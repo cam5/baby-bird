@@ -1,6 +1,6 @@
 import pc from 'picocolors';
 import { describe, expect, it } from 'vitest';
-import { highlightCode, languageForPath, lineTint, stripAnsi, supports256Colors, truncateAnsi } from '../../src/render/highlight.js';
+import { highlightCode, languageForPath, stripAnsi, truncateAnsi } from '../../src/render/highlight.js';
 
 const c = pc.createColors(true);
 
@@ -58,19 +58,5 @@ describe('truncateAnsi', () => {
     expect(stripAnsi(cut)).toBe('const "a …');
     expect(cut).toContain('\x1b[35mconst');
     expect(cut.endsWith('\x1b[39m\x1b[22m\x1b[23m\x1b[24m…')).toBe(true);
-  });
-});
-
-describe('tints and detection', () => {
-  it('uses 256-color backgrounds per theme', () => {
-    expect(lineTint('add', 'dark')).toEqual({ open: '\x1b[48;5;22m', close: '\x1b[49m' });
-    expect(lineTint('del', 'light')).toEqual({ open: '\x1b[48;5;224m', close: '\x1b[49m' });
-  });
-  it('detects 256-color terminals from common variables', () => {
-    expect(supports256Colors({ TERM: 'xterm-256color' })).toBe(true);
-    expect(supports256Colors({ TERM: 'xterm', COLORTERM: 'truecolor' })).toBe(true);
-    expect(supports256Colors({ TERM: 'xterm', TERM_PROGRAM: 'Apple_Terminal' })).toBe(true);
-    expect(supports256Colors({ TERM: 'dumb', COLORTERM: 'truecolor' })).toBe(false);
-    expect(supports256Colors({ TERM: 'vt100' })).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import pc from 'picocolors';
 import { UsageError } from '../core/errors.js';
 import type { Excerpt, Section, Tour, TourSource, TourStats } from '../core/types.js';
-import { highlightCode, languageForPath, lineTint, truncateAnsi, visibleLength as visibleWidth } from './highlight.js';
+import { highlightCode, languageForPath, truncateAnsi } from './highlight.js';
 import type { Renderer, RenderOptions } from './renderer.js';
 
 type Colors = ReturnType<typeof pc.createColors>;
@@ -14,7 +14,7 @@ export class CliRenderer implements Renderer {
   render(tour: Tour, opts: RenderOptions): string {
     const c = pc.createColors(opts.color);
     const width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, opts.width));
-    const style: ExcerptStyle = { highlight: Boolean(opts.color && opts.highlight), theme: opts.theme ?? 'dark' };
+    const style: ExcerptStyle = { highlight: Boolean(opts.color && opts.highlight) };
     const out: string[] = [];
 
     out.push(...renderHeader(tour, c, width, opts.fromCache ?? false));
@@ -74,7 +74,6 @@ function renderToc(tour: Tour, c: Colors, width: number): string[] {
 
 interface ExcerptStyle {
   highlight: boolean;
-  theme: 'dark' | 'light';
 }
 
 function renderSection(s: Section, index: number, count: number, c: Colors, width: number, style: ExcerptStyle): string[] {
@@ -118,21 +117,21 @@ function renderExcerpt(e: Excerpt, c: Colors, width: number, style: ExcerptStyle
     const plain = texts[i]!;
 
     if (!highlighted) {
-      const body = `${sign}${truncate(plain, budget)}`;
-      lines.push(`${gutter}${l.type === 'add' ? c.green(body) : l.type === 'del' ? c.red(body) : body}`);
+      const signStyled = l.type === 'add' ? c.green(sign) : l.type === 'del' ? c.red(sign) : sign;
+      lines.push(`${gutter}${signStyled}${truncate(plain, budget)}`);
       return;
     }
 
-    // Syntax colors on the text; add/del expressed by a colored sign and a background tint across the row.
+    // Syntax colors on the text; add/del expressed by a colored sign, no row background.
+    // Deliberately not bold: terminals often render bold + a base color via their "bright"
+    // palette slot, and some themes leave that slot washed out.
     const text = truncateAnsi(highlighted[i]!, budget);
-    const pad = ' '.repeat(Math.max(0, budget - visibleWidth(text)));
     if (l.type === 'ctx') {
       lines.push(`${gutter} ${text}`);
       return;
     }
-    const tint = lineTint(l.type, style.theme);
-    const signStyled = l.type === 'add' ? c.green(c.bold('+')) : c.red(c.bold('-'));
-    lines.push(`${gutter}${tint.open}${signStyled}${text}${pad}${tint.close}`);
+    const signStyled = l.type === 'add' ? c.green('+') : c.red('-');
+    lines.push(`${gutter}${signStyled}${text}`);
   });
   return lines;
 }
