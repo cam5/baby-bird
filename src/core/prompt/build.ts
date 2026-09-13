@@ -2,12 +2,16 @@ import type { CommitInfo, DiffFile, Hunk, ParsedDiff, PullRequestInfo, TourSourc
 import { diffStats } from '../../git/parse.js';
 import { promptHeader } from './template.js';
 
-export interface PromptInput {
+/** The change as gathered from git and the code host. */
+export interface ChangeInput {
   source: TourSource;
   branch: string | null;
   diff: ParsedDiff;
   commits: CommitInfo[];
   pullRequest?: PullRequestInfo;
+}
+
+export interface PromptInput extends ChangeInput {
   /** Soft budget for the whole prompt, in bytes. */
   maxBytes: number;
   /** The runner enforces the JSON schema itself (e.g. claude --json-schema); adjusts the output instruction. */
@@ -31,6 +35,15 @@ const MAX_PR_BODY_BYTES = 12_000;
 
 export function buildPrompt(input: PromptInput): BuiltPrompt {
   const header = promptHeader(Boolean(input.structured));
+  const change = renderChange(input, input.maxBytes - bytes(header) - 8);
+  return { prompt: [header, change.text].join('\n'), truncation: change.truncation };
+}
+
+/**
+ * The change itself: source, PR text, commit subjects, the file table, and the diff with every
+ * hunk labeled by id. Diffs are shortened biggest-file-first to fit `maxBytes`.
+ */
+export function renderChange(input: ChangeInput, maxBytes: number): { text: string; truncation: TruncationReport } {
   const context = renderContext(input);
   const truncation: TruncationReport = { truncated: [], omitted: [] };
   const blocks = input.diff.files.map((file) => {
@@ -47,7 +60,7 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
   });
   const text = (b: (typeof blocks)[number]) => (b.mode === 'full' ? b.full : b.mode === 'truncated' ? b.truncated! : b.omitted);
   const total = () => bytes(diffPreamble(truncation)) + blocks.reduce((n, b) => n + bytes(text(b)), 0);
-  const budget = input.maxBytes - bytes(header) - bytes(context) - 8;
+  const budget = maxBytes - bytes(context);
 
   if (total() > budget) {
     const bySize = [...blocks].sort((a, b) => bytes(b.full) - bytes(a.full));
@@ -66,15 +79,14 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
     }
   }
 
-  const prompt = [header, context, diffPreamble(truncation), ...blocks.map(text)].join('\n');
-  return { prompt, truncation };
+  return { text: [context, diffPreamble(truncation), ...blocks.map(text)].join('\n'), truncation };
 }
 
 function bytes(s: string): number {
   return Buffer.byteLength(s, 'utf8');
 }
 
-function renderContext(input: PromptInput): string {
+function renderContext(input: ChangeInput): string {
   const parts: string[] = ['# The change', ''];
 
   parts.push('## Source');

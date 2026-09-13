@@ -16,6 +16,13 @@ export type LlmKind = 'plain' | 'claude';
 export interface LlmPreset {
   /** argv; when promptVia is "arg", any "{prompt}" token is replaced with the prompt. */
   command: string[];
+  /**
+   * argv for `bb ask`: an interactive chat about a tour. Tokens: "{context-file}" is the path of a
+   * file holding the tour context (a system prompt), "{context}" is that text inline, and
+   * "{message}" is the user's opening message (argv entries that are only "{message}" are dropped
+   * when there is none).
+   */
+  chatCommand?: string[];
   promptVia?: PromptVia;
   /**
    * "claude": the Claude Code CLI; streaming flags and --json-schema are added
@@ -33,34 +40,47 @@ export interface LlmPreset {
  */
 const CLAUDE_BASE = ['claude', '-p', '--no-session-persistence', '--setting-sources', '', '--tools', ''];
 
+/** Claude Code interactive, with the tour context appended to its system prompt and the question as the opening message (after `--`, so a question starting with a dash is not read as a flag). */
+const CLAUDE_CHAT = ['claude', '--append-system-prompt-file', '{context-file}', '--', '{message}'];
+
+/** Interactive variant of a Claude preset: the same model/effort flags, minus the print-mode ones. */
+const claudeChat = (...flags: string[]): string[] => [CLAUDE_CHAT[0]!, ...flags, ...CLAUDE_CHAT.slice(1)];
+
 export const BUILTIN_PRESETS: Readonly<Record<string, LlmPreset>> = Object.freeze({
   claude: {
     command: [...CLAUDE_BASE],
+    chatCommand: claudeChat(),
     kind: 'claude',
     description: 'Claude Code CLI with its default model',
   },
   'claude-sonnet': {
     command: [...CLAUDE_BASE, '--model', 'sonnet', '--effort', 'high'],
+    chatCommand: claudeChat('--model', 'sonnet', '--effort', 'high'),
     kind: 'claude',
     description: 'Claude Code CLI, Sonnet at high effort',
   },
   'claude-opus': {
     command: [...CLAUDE_BASE, '--model', 'opus', '--effort', 'high'],
+    chatCommand: claudeChat('--model', 'opus', '--effort', 'high'),
     kind: 'claude',
     description: 'Claude Code CLI, Opus at high effort',
   },
   'claude-fable': {
     command: [...CLAUDE_BASE, '--model', 'fable', '--effort', 'high'],
+    chatCommand: claudeChat('--model', 'fable', '--effort', 'high'),
     kind: 'claude',
     description: 'Claude Code CLI, Fable at high effort',
   },
   'claude-haiku': {
     command: [...CLAUDE_BASE, '--model', 'haiku'],
+    chatCommand: claudeChat('--model', 'haiku'),
     kind: 'claude',
     description: 'Claude Code CLI, Haiku (fast and cheap)',
   },
   llm: {
     command: ['llm'],
+    // `llm chat` has no opening-message argument; bb warns and the question is typed into the chat.
+    chatCommand: ['llm', 'chat', '-s', '{context}'],
     description: "Simon Willison's llm CLI with its default model",
   },
 });
@@ -74,6 +94,7 @@ const LlmKindSchema = z.enum(['plain', 'claude']);
 
 export const LlmPresetSchema = z.object({
   command: z.array(z.string()).min(1),
+  chatCommand: z.array(z.string()).min(1).optional(),
   promptVia: PromptViaSchema.optional(),
   kind: LlmKindSchema.optional(),
   description: z.string().optional(),
@@ -85,6 +106,8 @@ export const ConfigSchema = z.object({
     presets: z.record(z.string(), LlmPresetSchema),
     args: z.array(z.string()),
     command: z.array(z.string()).min(1).nullable(),
+    /** Interactive command for `bb ask`; when set it replaces the preset's chatCommand. Same tokens as a preset's. */
+    chatCommand: z.array(z.string()).min(1).nullable(),
     promptVia: PromptViaSchema.nullable(),
     kind: LlmKindSchema.nullable(),
     /** Claude kind only: pass --json-schema so the CLI validates the answer itself. Off by default (see README). */
@@ -134,6 +157,7 @@ export const DEFAULT_CONFIG: Config = {
     presets: {},
     args: [],
     command: null,
+    chatCommand: null,
     promptVia: null,
     kind: null,
     jsonSchema: false,
@@ -359,6 +383,34 @@ export function resolveLlm(config: Config): ResolvedLlm {
     preset: llm.preset,
     ...common,
   };
+}
+
+export interface ResolvedChat {
+  /** argv template; see LlmPreset.chatCommand for the tokens. */
+  command: string[];
+  /** Preset name the command came from, or null for llm.chatCommand / a custom command. */
+  preset: string | null;
+  env: Record<string, string>;
+}
+
+/** The interactive command `bb ask` runs. Errors when neither the preset nor llm.chatCommand provides one. */
+export function resolveChat(config: Config): ResolvedChat {
+  const { llm } = config;
+  if (llm.chatCommand) return { command: [...llm.chatCommand], preset: null, env: llm.env };
+  if (llm.command) {
+    throw new ConfigError('llm.command is set but llm.chatCommand is not, so there is nothing to chat with.', 'Set llm.chatCommand (see README), or pick a preset with --preset.');
+  }
+  const presets = allPresets(config);
+  const preset = presets[llm.preset];
+  if (!preset) {
+    const names = Object.keys(presets).sort().join(', ');
+    throw new ConfigError(`Unknown LLM preset "${llm.preset}"`, `Available presets: ${names}. Define your own under llm.presets, or set llm.command.`);
+  }
+  if (!preset.chatCommand) {
+    const withChat = Object.entries(presets).filter(([, p]) => p.chatCommand).map(([n]) => n).sort().join(', ');
+    throw new ConfigError(`Preset "${llm.preset}" has no chatCommand.`, `Add one under llm.presets.${llm.preset}.chatCommand, set llm.chatCommand, or use a preset that has one: ${withChat}.`);
+  }
+  return { command: [...preset.chatCommand], preset: llm.preset, env: llm.env };
 }
 
 // ---------------------------------------------------------------------------
