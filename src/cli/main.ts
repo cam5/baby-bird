@@ -5,6 +5,7 @@ import pkg from '../../package.json' with { type: 'json' };
 import { BadLlmOutputError, BbError } from '../core/errors.js';
 import { cacheClearCommand, cacheLsCommand, cachePathCommand } from './cache-cmd.js';
 import { configCommand } from './config-cmd.js';
+import { askCommand } from './ask-cmd.js';
 import { initCommand } from './init-cmd.js';
 import { tourCommand } from './tour.js';
 
@@ -12,6 +13,11 @@ function positiveInt(value: string): number {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) throw new InvalidArgumentError('must be a positive integer');
   return n;
+}
+
+/** A subcommand's options plus any global flags given before its name (`bb -C dir cache ls`). */
+function optsWithGlobals<T>(cmd: Command): T {
+  return cmd.optsWithGlobals() as T;
 }
 
 function addGlobalFlags(cmd: Command): Command {
@@ -35,6 +41,8 @@ program
   .name('bb')
   .description('Guided code tours for git changes, on the command line.')
   .version(pkg.version, '-V, --version')
+  // Options after a subcommand name belong to the subcommand; `bb ask --preset x` must not be eaten by the root.
+  .enablePositionalOptions()
   .configureOutput({ outputError: (str, write) => write(pc.red(str)) })
   .showHelpAfterError('(run with --help for usage)');
 
@@ -65,24 +73,52 @@ Examples:
   bb --section 2         show only the second section
   bb --json | jq         machine-readable output
   bb --preset claude-sonnet --refresh
+  bb ask HEAD~1 "what changed in progress.ts?"   chat about a tour (see bb ask --help)
 `,
   )
   .action(async (range: string | undefined, flags) => {
     await tourCommand(range, flags);
   });
 
+addGlobalFlags(program.command('ask').description('chat with the LLM about a tour (the tour is generated or taken from the cache first)'))
+  .argument('[range]', 'what to tour, as for `bb`; omit it to tour the same thing bare `bb` would')
+  .argument('[message...]', 'opening message for the chat')
+  .option('-w, --working', 'tour uncommitted changes in the working tree (tracked and untracked)')
+  .option('-s, --staged', 'tour staged changes only')
+  .option('--refresh', 'ignore a cached tour and regenerate it')
+  .option('--no-cache', 'neither read nor write the tour cache')
+  .option('--no-progress', 'do not show the live status block while generating')
+  .option('--dump-context', 'print the context that would be handed to the chat and exit')
+  .addHelpText(
+    'after',
+    `
+The first word is taken as a range only when git can resolve it (HEAD~3, main..feature);
+everything else is the opening message. The chat command comes from the preset (see \`bb config\`).
+
+Examples:
+  bb ask                                     chat about the current branch's tour
+  bb ask "why does the cache key include the command?"
+  bb ask HEAD~1 "what is going on in progress.ts?"
+  bb ask main..feature --preset claude-opus
+  bb ask --staged "is this safe to commit?"
+`,
+  )
+  .action(async (range: string | undefined, message: string[], _flags, cmd: Command) => {
+    await askCommand([range, ...message].filter((w): w is string => w !== undefined), optsWithGlobals(cmd));
+  });
+
 const cache = program.command('cache').description('manage cached tours');
-addGlobalFlags(cache.command('ls').description('list cached tours')).action(cacheLsCommand);
-addGlobalFlags(cache.command('clear').description('delete all cached tours')).action(cacheClearCommand);
-addGlobalFlags(cache.command('path').description('print the cache directory')).action(cachePathCommand);
+addGlobalFlags(cache.command('ls').description('list cached tours')).action((_flags, cmd: Command) => cacheLsCommand(optsWithGlobals(cmd)));
+addGlobalFlags(cache.command('clear').description('delete all cached tours')).action((_flags, cmd: Command) => cacheClearCommand(optsWithGlobals(cmd)));
+addGlobalFlags(cache.command('path').description('print the cache directory')).action((_flags, cmd: Command) => cachePathCommand(optsWithGlobals(cmd)));
 
 addGlobalFlags(program.command('config').description('show the effective configuration, its sources, and available presets'))
   .option('--json', 'print only the effective config as JSON')
-  .action(configCommand);
+  .action((_flags, cmd: Command) => configCommand(optsWithGlobals(cmd)));
 
 addGlobalFlags(program.command('init').description('write a starter .baby-bird/config.json in this repository'))
   .option('--force', 'overwrite an existing project config')
-  .action(initCommand);
+  .action((_flags, cmd: Command) => initCommand(optsWithGlobals(cmd)));
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const debug = process.argv.includes('--debug');

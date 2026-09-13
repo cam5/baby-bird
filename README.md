@@ -61,6 +61,8 @@ bb --dump-prompt       print the prompt instead of calling the model
 bb --refresh           regenerate even if a cached tour exists
 bb --preset claude-sonnet
 bb --no-progress       no live status block
+bb ask "why is the cache keyed by command?"      chat about the current branch's tour
+bb ask HEAD~1 "what is going on in progress.ts?" chat about a specific range
 ```
 
 ### What does bare `bb` tour?
@@ -72,6 +74,25 @@ bb --no-progress       no live status block
 
 The header of every tour says which one was used.
 
+### Asking questions about a tour
+
+`bb ask` opens an interactive chat with the same LLM CLI, primed with the tour:
+
+```
+bb ask                                       the tour bare `bb` would show
+bb ask "where is the retry handled?"         with an opening question
+bb ask HEAD~1 "what is going on in progress.ts?"
+bb ask main..feature --preset claude-opus
+bb ask --staged "is this safe to commit?"
+bb ask --dump-context                        print what the chat would be given, and exit
+```
+
+It takes the same range arguments and flags as `bb`, then an opening message. The first word is treated as a range only when git can resolve it (`HEAD~3`, `main..feature`); anything else is part of the message, so quoting is optional for plain questions.
+
+The tour is generated first, or taken from the cache: run `bb HEAD~1` in one window, and `bb ask HEAD~1 ...` in another reuses that tour and opens the chat straight away. The chat gets, as a system prompt: a short framing, the whole tour (sections, descriptions, excerpts with line numbers, the base and head SHAs), and then the same labeled diff the tour was built from, shortened to `llm.maxPromptBytes` like the prompt. With the Claude presets the chat is a normal interactive Claude Code session in the repository, so it can also open files and run git. `bb ask` exits with the chat's exit code.
+
+The command that opens the chat is the preset's `chatCommand` (see [LLM presets](#llm-presets)); presets without one cannot be asked.
+
 ## Configuration
 
 Config is JSON, merged in this order (later wins; objects merge, arrays replace):
@@ -80,7 +101,7 @@ Config is JSON, merged in this order (later wins; objects merge, arrays replace)
 2. `$XDG_CONFIG_HOME/baby-bird/config.json` (default `~/.config/baby-bird/config.json`)
 3. `<repo>/.baby-bird/config.json` (create one with `bb init`)
 4. environment: `BB_PRESET`, `BB_LLM_COMMAND`, `BB_CODEHOST`, `BB_CACHE_DIR`, `BB_NO_CACHE`, `NO_COLOR`
-5. flags: `--preset`, `--color/--no-color`, `--no-cache`, `--no-pager`
+5. flags: `--preset`, `--color/--no-color`, `--no-cache`, `--no-pager` (before or after a subcommand name)
 
 `bb config` shows every layer, what it contributed, the resolved LLM command, and all presets.
 
@@ -93,6 +114,7 @@ All keys, with defaults:
     "presets": {},             // your own presets; same names shadow built-ins
     "args": [],                // extra argv appended to the preset's command
     "command": null,           // a whole custom invocation; when set, "preset" is ignored
+    "chatCommand": null,       // what `bb ask` runs; replaces the preset's (see below)
     "promptVia": null,         // "stdin" (default) or "arg" (replace {prompt} in argv)
     "kind": null,              // "claude" (streams progress from the Claude Code CLI) or "plain"; default from the preset
     "jsonSchema": false,       // Claude kind: also pass --json-schema so the CLI validates the answer (see below)
@@ -134,6 +156,8 @@ The model is just a command: the prompt goes in on stdin, the answer comes out o
 | `claude-haiku` | the above plus `--model haiku` |
 | `llm` | `llm` ([Simon Willison's CLI](https://llm.datasette.io/)) |
 
+Each preset also has a `chatCommand`, which is what `bb ask` runs. For the Claude presets it is `claude [model and effort flags] --append-system-prompt-file {context-file} -- {message}`: a regular interactive session (your settings and CLAUDE.md apply) with the tour appended to the system prompt and the question as the first message. The `llm` preset uses `llm chat -s {context}`; `llm chat` cannot take an opening message, so `bb` says so and you type the question into the chat. In a chat command, `{context-file}` is replaced by the path of a temporary file holding the context, `{context}` by the text itself (mind your OS's argument size limits with big diffs), and `{message}` by the opening message; an argv entry that is only `{message}` is dropped when there is none.
+
 Add flags to a preset, define your own, or replace the command entirely:
 
 ```jsonc
@@ -143,11 +167,17 @@ Add flags to a preset, define your own, or replace the command entirely:
     "args": ["--fallback-model", "haiku"],
     "presets": {
       "local": { "command": ["ollama", "run", "qwen2.5-coder:14b"] },
-      "gemini": { "command": ["gemini", "-p", "{prompt}"], "promptVia": "arg" }
+      "gemini": {
+        "command": ["gemini", "-p", "{prompt}"],
+        "promptVia": "arg",
+        "chatCommand": ["gemini", "-i", "{message}"]
+      }
     }
   }
 }
 ```
+
+`llm.args` only applies to the tour command. A custom `llm.command` has no chat command of its own; set `llm.chatCommand` next to it if you want `bb ask` to work.
 
 ```sh
 bb --preset local
@@ -190,7 +220,7 @@ bb cache path
 
 ## Using it as a library
 
-The CLI is one consumer of a small core. `import { generateTour, CliRenderer, type Tour } from '@cam5/baby-bird'` gives you the same pipeline for a TUI, a web view, or a bot; a `Tour` is plain JSON (sections, stats, excerpts) with no git or LLM dependencies.
+The CLI is one consumer of a small core. `import { generateTour, CliRenderer, type Tour } from '@cam5/baby-bird'` gives you the same pipeline for a TUI, a web view, or a bot; a `Tour` is plain JSON (sections, stats, excerpts) with no git or LLM dependencies. `buildChatContext` produces the text `bb ask` hands to a chat, and `launchChat` runs a chat command with it.
 
 ## Development
 
@@ -220,6 +250,8 @@ git push --follow-tags
 | 3 | not a git repository, or nothing to tour |
 | 4 | the LLM command failed to run |
 | 5 | the model's output was unusable even after a repair attempt |
+
+`bb ask` exits with the chat command's own exit code once the chat ends.
 
 ## License
 

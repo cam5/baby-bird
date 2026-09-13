@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildPrompt } from '../../src/core/prompt/build.js';
+import { buildPrompt, renderChange } from '../../src/core/prompt/build.js';
+import { promptHeader } from '../../src/core/prompt/template.js';
 import type { TourSource } from '../../src/core/types.js';
 import { parseDiff } from '../../src/git/parse.js';
 
@@ -82,5 +83,15 @@ describe('buildPrompt', () => {
     const tiny = buildPrompt({ source, branch: null, diff, commits: [], maxBytes: 10 });
     expect(tiny.truncation.truncated).toEqual([]);
     expect(tiny.truncation.omitted.length).toBe(diff.files.filter((f) => f.hunks.length > 0).length);
+  });
+});
+
+describe('renderChange', () => {
+  it('is exactly the part of the prompt after the header', async () => {
+    const input = { source, branch: 'feat/x', diff: await mixed(), commits: [{ sha: '1', subject: 'first' }], maxBytes: 1_000_000 };
+    const header = promptHeader(false);
+    const change = renderChange(input, input.maxBytes - Buffer.byteLength(header) - 8);
+    expect(buildPrompt(input).prompt).toBe(header + '\n' + change.text);
+    expect(change.text).toMatch(/^# The change\n/);
   });
 });

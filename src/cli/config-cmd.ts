@@ -1,5 +1,5 @@
 import pc from 'picocolors';
-import { allPresets, resolveLlm } from '../core/config.js';
+import { allPresets, resolveChat, resolveLlm } from '../core/config.js';
 import { ConfigError } from '../core/errors.js';
 import { CommandProvider } from '../llm/command.js';
 import { openSession, type GlobalFlags } from './shared.js';
@@ -33,6 +33,13 @@ export async function configCommand(flags: GlobalFlags & { json?: boolean }): Pr
     out.push(`  prompt:   via ${llm.promptVia}`);
   } catch (err) {
     out.push(`  ${c.red((err as ConfigError).message)}`);
+  }
+  try {
+    const chat = resolveChat(config);
+    const provider = new CommandProvider({ command: chat.command, promptVia: 'arg', timeoutMs: 1 });
+    out.push(`  chat:     ${provider.describe()}${c.dim('  (bb ask)')}`);
+  } catch (err) {
+    out.push(`  chat:     ${c.dim(`none: ${(err as ConfigError).message}`)}`);
   }
   out.push('');
 

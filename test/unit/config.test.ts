@@ -7,6 +7,7 @@ import {
   DEFAULT_CONFIG,
   deepMerge,
   loadConfig,
+  resolveChat,
   resolveLlm,
   shellSplit,
   userConfigPath,
@@ -145,5 +146,38 @@ describe('resolveLlm', () => {
     } catch (err) {
       expect((err as ConfigError).hint).toMatch(/claude-sonnet/);
     }
+  });
+});
+
+describe('resolveChat', () => {
+  it('takes the chat command from the preset', () => {
+    expect(resolveChat(DEFAULT_CONFIG)).toEqual({
+      command: ['claude', '--append-system-prompt-file', '{context-file}', '--', '{message}'],
+      preset: 'claude',
+      env: {},
+    });
+    expect(resolveChat(deepMerge(DEFAULT_CONFIG, { llm: { preset: 'claude-sonnet' } })).command).toEqual([
+      'claude', '--model', 'sonnet', '--effort', 'high', '--append-system-prompt-file', '{context-file}', '--', '{message}',
+    ]);
+    for (const preset of Object.keys(BUILTIN_PRESETS)) {
+      expect(BUILTIN_PRESETS[preset]!.chatCommand, preset).toBeDefined();
+    }
+  });
+
+  it('prefers llm.chatCommand over the preset', () => {
+    const cfg = deepMerge(DEFAULT_CONFIG, { llm: { chatCommand: ['my-chat', '{context-file}'], env: { X: '1' } } });
+    expect(resolveChat(cfg)).toEqual({ command: ['my-chat', '{context-file}'], preset: null, env: { X: '1' } });
+  });
+
+  it('errors when there is nothing to chat with', () => {
+    expect(() => resolveChat(deepMerge(DEFAULT_CONFIG, { llm: { command: ['my-llm'] } }))).toThrow(/llm\.chatCommand is not/);
+    const cfg = deepMerge(DEFAULT_CONFIG, { llm: { preset: 'mine', presets: { mine: { command: ['my-llm'] } } } });
+    expect(() => resolveChat(cfg)).toThrow(/Preset "mine" has no chatCommand/);
+    try {
+      resolveChat(cfg);
+    } catch (err) {
+      expect((err as ConfigError).hint).toMatch(/claude-sonnet/);
+    }
+    expect(() => resolveChat(deepMerge(DEFAULT_CONFIG, { llm: { preset: 'nope' } }))).toThrow(/Unknown LLM preset "nope"/);
   });
 });
