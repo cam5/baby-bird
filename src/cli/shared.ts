@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import type { PartialConfig } from '../core/config.js';
 import { loadConfig, type LoadedConfig } from '../core/config.js';
 import { gitRoot } from '../git/exec.js';
+import { supports256Colors } from '../render/highlight.js';
 
 export interface GlobalFlags {
   cwd?: string;
@@ -11,6 +12,8 @@ export interface GlobalFlags {
   preset?: string;
   cache?: boolean;
   pager?: boolean;
+  highlight?: boolean;
+  theme?: 'dark' | 'light';
 }
 
 export interface Session {
@@ -31,6 +34,8 @@ export function flagsToOverrides(flags: GlobalFlags): PartialConfig {
   else if (flags.color === false) o.render = { color: 'never' };
   if (flags.cache === false) o.cache = { enabled: false };
   if (flags.pager === false) o.render = { ...(o.render ?? {}), pager: 'never' };
+  if (flags.highlight === false) o.render = { ...(o.render ?? {}), highlight: 'never' };
+  if (flags.theme) o.render = { ...(o.render ?? {}), theme: flags.theme };
   return o;
 }
 
@@ -54,6 +59,12 @@ export function resolveColor(mode: 'auto' | 'always' | 'never'): boolean {
   if (mode === 'always') return true;
   if (mode === 'never') return false;
   return Boolean(process.stdout.isTTY) && process.env.TERM !== 'dumb';
+}
+
+export function resolveHighlight(mode: 'auto' | 'always' | 'never', colorEnabled: boolean): boolean {
+  if (!colorEnabled || mode === 'never') return false;
+  if (mode === 'always') return true;
+  return supports256Colors();
 }
 
 export function terminalWidth(configured: number | null, stream: { columns?: number } = process.stdout): number {

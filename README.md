@@ -106,7 +106,11 @@ All keys, with defaults:
     "exclude": ["**/pnpm-lock.yaml", "**/package-lock.json", "**/yarn.lock", "**/Cargo.lock",
                 "**/*.min.*", "**/dist/**", "**/*.snap", "**/*.map"]
   },
-  "render": { "color": "auto", "pager": "auto", "maxExcerptLines": 60, "width": null },
+  "render": {
+    "color": "auto", "pager": "auto", "maxExcerptLines": 60, "width": null,
+    "highlight": "auto",       // syntax colors in excerpts on 256-color terminals; "always" | "never"
+    "theme": "dark"            // background tint palette for added/removed lines; "light" for light terminals
+  },
   "cache":  { "enabled": true, "dir": null }  // default $XDG_CACHE_HOME/baby-bird
 }
 ```
@@ -155,6 +159,10 @@ Presets have a `kind`. The built-in Claude presets are `"claude"`: `bb` appends 
 `llm.jsonSchema: true` additionally passes `--json-schema` so the CLI validates the answer itself. It is off by default: on Claude Code 2.1.270 the model's first structured call is rejected about five times in six (it emits tool-call placeholders such as `$PARAMETER_NAME` as top-level keys), and although the CLI makes it retry, every rejection costs a full extra answer. Worth re-checking on newer versions.
 
 The effective command is part of the cache key, so switching presets regenerates the tour instead of reusing another model's.
+
+### Excerpt highlighting
+
+On a 256-color terminal, excerpts get language-aware token colors (keywords, strings, comments) chosen by file extension, and added/removed lines are marked by a bold `+`/`-` sign plus a subtle green/red row tint underneath, so both signals read at once. The token palette never uses green or red. Turn it off with `--no-highlight` or `render.highlight: "never"`, and pick `--theme light` (or `render.theme`) on a light terminal background. Files with no known language keep the plain green/red rendering.
 
 ### Code host
 

@@ -46,6 +46,7 @@
   },
   "dependencies": {
     "commander": "^15.0.0",
+    "lowlight": "^3.3.0",
     "picocolors": "^1.1.1",
     "zod": "^4.6.2"
   },

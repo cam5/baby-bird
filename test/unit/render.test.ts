@@ -57,6 +57,34 @@ describe('CliRenderer', () => {
   it('colors output when asked', () => {
     const out = new CliRenderer().render(tour, { color: true, width: 80 });
     expect(out).toMatch(/\x1b\[/);
+    expect(out).not.toContain('\x1b[48;5;'); // no tints unless highlight is on
+  });
+
+  it('layers syntax colors under add/del row tints when highlighting', () => {
+    const out = new CliRenderer().render(tour, { color: true, width: 80, highlight: true, theme: 'dark' });
+    const rows = out.split('\n').filter((l) => l.includes('│'));
+    expect(rows).toHaveLength(4);
+    const [ctx, del, add1, add2] = rows as [string, string, string, string];
+    expect(ctx).not.toContain('\x1b[48;5;');
+    expect(ctx).toContain('\x1b[35mexport'); // keyword colored
+    expect(del).toContain('\x1b[48;5;52m');
+    expect(del).toContain('\x1b[31m\x1b[1m-');
+    expect(add1).toContain('\x1b[48;5;22m');
+    expect(add1).toContain('\x1b[32m\x1b[1m+');
+    expect(add1.endsWith('\x1b[49m')).toBe(true);
+    // tinted rows are padded to the same visible width
+    const vis = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '').length;
+    expect(vis(add1)).toBe(vis(add2));
+    expect(vis(del)).toBe(vis(add1));
+    // visible text is unchanged
+    expect(out.replace(/\x1b\[[0-9;]*m/g, '')).toContain('      12 │+    size: number;');
+  });
+
+  it('falls back to plain coloring for files without a known language', () => {
+    const t = { ...tour, sections: [{ ...tour.sections[0]!, excerpts: [{ ...tour.sections[0]!.excerpts[0]!, file: 'notes.unknown' }] }] };
+    const out = new CliRenderer().render(t, { color: true, width: 80, highlight: true });
+    expect(out).not.toContain('\x1b[48;5;');
+    expect(out).toContain('\x1b[32m+  name: string;');
   });
 
   it('renders a single section and rejects a bad index', () => {
