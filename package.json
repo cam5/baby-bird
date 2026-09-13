@@ -1,6 +1,6 @@
 {
   "name": "@cam5/baby-bird",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Guided code tours for git changes, on the command line.",
   "license": "MIT",
   "type": "module",
