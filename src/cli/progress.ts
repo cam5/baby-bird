@@ -6,6 +6,7 @@ import { wrap } from '../render/cli.js';
 const SPINNER = ['✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳'];
 const VERBS = ['Hatching', 'Pecking', 'Nesting', 'Chirping', 'Preening', 'Fledging', 'Brooding', 'Warbling', 'Peeping'];
 const THINKING_TAIL_CHARS = 2000;
+const VERB_INTERVAL_MS = 7500;
 
 export interface LiveProgressOptions {
   color: boolean;
@@ -13,7 +14,12 @@ export interface LiveProgressOptions {
   /** How many lines of thinking / section titles to show under the status line. */
   windowLines?: number;
   now?: () => number;
+  /** Pin a single verb (tests). */
   verb?: string;
+  /** Verbs to rotate through; the built-in list is used, shuffled, when omitted. */
+  verbs?: string[];
+  /** How often the verb changes. */
+  verbIntervalMs?: number;
   frameMs?: number;
 }
 
@@ -44,7 +50,7 @@ export class LiveProgress implements ProgressSink {
   private lastLines = 0;
   private timer: NodeJS.Timeout | null = null;
   private stopped = false;
-  private readonly verb: string;
+  private readonly verbs: string[];
   private readonly now: () => number;
   private readonly windowLines: number;
   private readonly onSigint = () => {
@@ -58,7 +64,7 @@ export class LiveProgress implements ProgressSink {
   ) {
     this.now = opts.now ?? Date.now;
     this.startedAt = this.now();
-    this.verb = opts.verb ?? VERBS[Math.floor(Math.random() * VERBS.length)]!;
+    this.verbs = opts.verb ? [opts.verb] : opts.verbs && opts.verbs.length ? opts.verbs : shuffle(VERBS);
     this.windowLines = opts.windowLines ?? 5;
   }
 
@@ -140,7 +146,7 @@ export class LiveProgress implements ProgressSink {
         break;
       case 'thinking': {
         const meta = [elapsed, this.phaseLabel.replace(/^asking\s+/i, '')].filter(Boolean).join(' · ');
-        lines.push(`${spin} ${this.verb}… ${c.dim(meta)}`);
+        lines.push(`${spin} ${this.verb()}… ${c.dim(meta)}`);
         for (const n of this.notices.slice(-1)) lines.push(`  ${c.yellow('↻')} ${c.yellow(fit(n).slice(0, width - 4))}`);
         if (this.thinking) {
           const tail = this.thinking.slice(-THINKING_TAIL_CHARS).replace(/\s+/g, ' ').trim();
@@ -166,7 +172,7 @@ export class LiveProgress implements ProgressSink {
         break;
       }
       case 'output':
-        lines.push(`${spin} ${this.verb}… ${c.dim(`${elapsed} · ${formatBytes(this.outputBytes)} received`)}`);
+        lines.push(`${spin} ${this.verb()}… ${c.dim(`${elapsed} · ${formatBytes(this.outputBytes)} received`)}`);
         break;
     }
     return lines;
@@ -198,6 +204,12 @@ export class LiveProgress implements ProgressSink {
     }
     if (this.usage.model) parts.push(this.usage.model);
     return c.dim(`✻ ${parts.join(' · ')}`);
+  }
+
+  /** The current verb; rotates every verbIntervalMs so long waits do not stare at one word. */
+  private verb(): string {
+    const step = Math.floor((this.now() - this.startedAt) / (this.opts.verbIntervalMs ?? VERB_INTERVAL_MS));
+    return this.verbs[step % this.verbs.length]!;
   }
 
   private elapsed(): string {
@@ -235,6 +247,15 @@ export function loggingProgress(log: (msg: string) => void): ProgressSink {
     phase: (label) => log(label),
     llm: () => {},
   };
+}
+
+function shuffle<T>(items: readonly T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
 }
 
 function formatBytes(n: number): string {

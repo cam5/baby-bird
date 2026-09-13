@@ -81,6 +81,22 @@ describe('LiveProgress', () => {
     expect(f.slice(1)).toEqual(['  ↻ Answer rejected (schema: /sections: must be array); the model is retrying', '  🐣 Right', '  ✓ One']);
   });
 
+  it('rotates the verb on an interval', () => {
+    let t = 0;
+    const p = new LiveProgress(new FakeStream(), { color: false, width: 60, now: () => t, verbs: ['Hatching', 'Pecking', 'Nesting'], verbIntervalMs: 7500 });
+    p.phase('Asking claude');
+    const verb = () => p.frame()[0]!.split(' ')[1];
+    expect(verb()).toBe('Hatching…');
+    t = 7_400;
+    expect(verb()).toBe('Hatching…');
+    t = 7_600;
+    expect(verb()).toBe('Pecking…');
+    t = 15_100;
+    expect(verb()).toBe('Nesting…');
+    t = 22_600;
+    expect(verb()).toBe('Hatching…');
+  });
+
   it('shows byte progress for opaque commands', () => {
     const { p } = make();
     p.phase('Asking llm');
