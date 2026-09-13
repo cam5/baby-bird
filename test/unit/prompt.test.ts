@@ -36,6 +36,16 @@ describe('buildPrompt', () => {
     expect(prompt).not.toContain('Note: to fit the size budget');
   });
 
+  it('switches the output instruction in structured mode', async () => {
+    const base = { source, branch: null, diff: await mixed(), commits: [], maxBytes: 1e6 };
+    const plain = buildPrompt(base).prompt;
+    const structured = buildPrompt({ ...base, structured: true }).prompt;
+    expect(plain).toContain('Respond with ONLY a JSON object');
+    expect(structured).toContain('Submit the tour through the structured output tool');
+    expect(structured).not.toContain('Respond with ONLY a JSON object');
+    expect(structured).toContain('"sections": [');
+  });
+
   it('describes working tree sources', async () => {
     const { prompt } = buildPrompt({ source: { kind: 'working', headSha: 'x', staged: true, resolvedBy: 'explicit' }, branch: null, diff: await mixed(), commits: [], maxBytes: 1e6 });
     expect(prompt).toContain('Staged (uncommitted) changes (detached HEAD).');

@@ -53,6 +53,7 @@ addGlobalFlags(program)
     if (v !== 'dark' && v !== 'light') throw new InvalidArgumentError('must be dark or light');
     return v;
   })
+  .option('--no-progress', 'do not show the live status block while generating')
   .addHelpText(
     'after',
     `

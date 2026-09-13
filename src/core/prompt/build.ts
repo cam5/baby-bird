@@ -1,6 +1,6 @@
 import type { CommitInfo, DiffFile, Hunk, ParsedDiff, PullRequestInfo, TourSource } from '../types.js';
 import { diffStats } from '../../git/parse.js';
-import { PROMPT_HEADER } from './template.js';
+import { promptHeader } from './template.js';
 
 export interface PromptInput {
   source: TourSource;
@@ -10,6 +10,8 @@ export interface PromptInput {
   pullRequest?: PullRequestInfo;
   /** Soft budget for the whole prompt, in bytes. */
   maxBytes: number;
+  /** The runner enforces the JSON schema itself (e.g. claude --json-schema); adjusts the output instruction. */
+  structured?: boolean;
 }
 
 export interface TruncationReport {
@@ -28,6 +30,7 @@ const KEEP_LINES = 40;
 const MAX_PR_BODY_BYTES = 12_000;
 
 export function buildPrompt(input: PromptInput): BuiltPrompt {
+  const header = promptHeader(Boolean(input.structured));
   const context = renderContext(input);
   const truncation: TruncationReport = { truncated: [], omitted: [] };
   const blocks = input.diff.files.map((file) => {
@@ -44,7 +47,7 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
   });
   const text = (b: (typeof blocks)[number]) => (b.mode === 'full' ? b.full : b.mode === 'truncated' ? b.truncated! : b.omitted);
   const total = () => bytes(diffPreamble(truncation)) + blocks.reduce((n, b) => n + bytes(text(b)), 0);
-  const budget = input.maxBytes - bytes(PROMPT_HEADER) - bytes(context) - 8;
+  const budget = input.maxBytes - bytes(header) - bytes(context) - 8;
 
   if (total() > budget) {
     const bySize = [...blocks].sort((a, b) => bytes(b.full) - bytes(a.full));
@@ -63,7 +66,7 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
     }
   }
 
-  const prompt = [PROMPT_HEADER, context, diffPreamble(truncation), ...blocks.map(text)].join('\n');
+  const prompt = [header, context, diffPreamble(truncation), ...blocks.map(text)].join('\n');
   return { prompt, truncation };
 }
 

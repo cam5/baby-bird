@@ -1,0 +1,53 @@
+name: Release
+
+# Runs when a version tag is pushed (e.g. `git push --follow-tags` after `npm version patch`).
+# Publishes to npm via trusted publishing (OIDC, no stored token) and creates a GitHub Release.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # npm trusted publishing and provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Must match the environment name configured for the trusted publisher on npmjs.com.
+    environment: npm
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false # npm's guidance: never cache in release builds
+
+      - name: Check that the tag matches package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "package.json is at $version but the tag is $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+      # Trusted publishing needs npm 11.5.1 or newer; make sure of it regardless of what Node bundles.
+      - run: npm install -g npm@latest
+
+      # --ignore-scripts skips prepublishOnly, which would rerun the typecheck/test/build above.
+      - name: Publish to npm
+        run: npm publish --provenance --ignore-scripts
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes

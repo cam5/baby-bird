@@ -7,6 +7,7 @@ import { resolveLlm, type Config } from './config.js';
 import { BadLlmOutputError, NoChangesError } from './errors.js';
 import { extractJson } from './json.js';
 import { materializeTour } from './materialize.js';
+import { noProgress, type ProgressSink } from './progress.js';
 import { buildPrompt, type BuiltPrompt } from './prompt/build.js';
 import { PROMPT_VERSION, REPAIR_SUFFIX } from './prompt/template.js';
 import { formatIssues, LlmTourOutputSchema, type LlmTourOutput } from './schema.js';
@@ -24,6 +25,8 @@ export interface TourOptions {
   noCache?: boolean;
   debug?: (msg: string) => void;
   warn?: (msg: string) => void;
+  /** Receives stage changes and model events; the CLI renders these live. */
+  progress?: ProgressSink;
   /** Injectable for tests. */
   provider?: LlmProvider;
   codehost?: CodeHost;
@@ -49,10 +52,12 @@ export interface TourResult {
 export async function prepareTour(opts: TourOptions): Promise<PreparedTour> {
   const debug = opts.debug ?? (() => {});
   const warn = opts.warn ?? (() => {});
+  const progress = opts.progress ?? noProgress;
   const { config } = opts;
   const llm = resolveLlm(config);
   const codehost = opts.codehost ?? createCodeHost(config, { debug });
 
+  progress.phase('Working out what to tour');
   const resolved = await resolveRange(opts.range ?? {}, {
     cwd: opts.cwd,
     exclude: config.git.exclude,
@@ -62,6 +67,7 @@ export async function prepareTour(opts: TourOptions): Promise<PreparedTour> {
   });
   debug(`source: ${JSON.stringify(resolved.source)}`);
 
+  progress.phase('Collecting the diff');
   const diff = await collectDiff(resolved.source, { cwd: opts.cwd, exclude: config.git.exclude, warn });
   if (diff.files.length === 0) {
     throw new NoChangesError('The selected range has no changes (after excludes).', 'Check git.exclude in your config, or pass a different range.');
@@ -71,7 +77,8 @@ export async function prepareTour(opts: TourOptions): Promise<PreparedTour> {
   const context: TourContext = { source: resolved.source, branch: resolved.branch, diff, commits };
   if (resolved.pullRequest) context.pullRequest = resolved.pullRequest;
 
-  const built = buildPrompt({ ...context, maxBytes: llm.maxPromptBytes });
+  progress.phase('Building the prompt');
+  const built = buildPrompt({ ...context, maxBytes: llm.maxPromptBytes, structured: llm.kind === 'claude' && llm.jsonSchema });
   if (built.truncation.truncated.length || built.truncation.omitted.length) {
     warn(`Prompt exceeded ${llm.maxPromptBytes} bytes; truncated ${built.truncation.truncated.length} and omitted ${built.truncation.omitted.length} file diff(s).`);
   }
@@ -84,12 +91,14 @@ export async function prepareTour(opts: TourOptions): Promise<PreparedTour> {
 export async function generateTour(opts: TourOptions, prepared?: PreparedTour): Promise<TourResult> {
   const debug = opts.debug ?? (() => {});
   const warn = opts.warn ?? (() => {});
+  const progress = opts.progress ?? noProgress;
   const { config } = opts;
   const prep = prepared ?? (await prepareTour(opts));
   const useCache = config.cache.enabled && !opts.noCache;
   const cache = useCache ? new TourCache(opts.cacheDir) : null;
 
   if (cache && !opts.refresh) {
+    progress.phase('Checking the cache');
     const hit = await cache.get(prep.cacheKey);
     if (hit) {
       debug(`cache hit: ${cache.pathFor(prep.cacheKey)}`);
@@ -100,8 +109,10 @@ export async function generateTour(opts: TourOptions, prepared?: PreparedTour): 
 
   const llm = resolveLlm(config);
   const provider = opts.provider ?? createProvider(llm, { cwd: opts.cwd, debug });
-  const output = await completeWithRepair(provider, prep.built.prompt, debug);
+  progress.phase(`Asking ${llm.preset ?? llm.command[0]}`);
+  const output = await completeWithRepair(provider, prep.built.prompt, debug, progress);
 
+  progress.phase('Assembling the tour');
   const tour = materializeTour({
     output,
     diff: prep.context.diff,
@@ -121,14 +132,16 @@ export async function generateTour(opts: TourOptions, prepared?: PreparedTour): 
 }
 
 /** Ask once; if the answer isn't usable JSON matching the schema, ask once more with the reason. */
-async function completeWithRepair(provider: LlmProvider, prompt: string, debug: (msg: string) => void): Promise<LlmTourOutput> {
-  let raw = await provider.complete(prompt);
+async function completeWithRepair(provider: LlmProvider, prompt: string, debug: (msg: string) => void, progress: ProgressSink): Promise<LlmTourOutput> {
+  const onEvent = (event: Parameters<ProgressSink['llm']>[0]) => progress.llm(event);
+  let raw = await provider.complete(prompt, { onEvent });
   debug(`raw model output (attempt 1):\n${raw}`);
   const first = parseOutput(raw);
   if (first.ok) return first.value;
 
   debug(`attempt 1 unusable: ${first.reason}; retrying with repair prompt`);
-  raw = await provider.complete(prompt + REPAIR_SUFFIX(first.reason));
+  progress.phase('Asking again (the first answer was not valid JSON)');
+  raw = await provider.complete(prompt + REPAIR_SUFFIX(first.reason), { onEvent });
   debug(`raw model output (attempt 2):\n${raw}`);
   const second = parseOutput(raw);
   if (second.ok) return second.value;

@@ -39,7 +39,7 @@ Contents
 ## Install
 
 ```sh
-pnpm add -g baby-bird     # or: npm i -g baby-bird
+pnpm add -g @cam5/baby-bird     # or: npm i -g @cam5/baby-bird
 bb --help
 ```
 
@@ -60,6 +60,7 @@ bb --json | jq         machine-readable tour
 bb --dump-prompt       print the prompt instead of calling the model
 bb --refresh           regenerate even if a cached tour exists
 bb --preset claude-sonnet
+bb --no-progress       no live status block
 ```
 
 ### What does bare `bb` tour?
@@ -93,6 +94,8 @@ All keys, with defaults:
     "args": [],                // extra argv appended to the preset's command
     "command": null,           // a whole custom invocation; when set, "preset" is ignored
     "promptVia": null,         // "stdin" (default) or "arg" (replace {prompt} in argv)
+    "kind": null,              // "claude" (streams progress from the Claude Code CLI) or "plain"; default from the preset
+    "jsonSchema": false,       // Claude kind: also pass --json-schema so the CLI validates the answer (see below)
     "timeoutMs": 180000,
     "maxPromptBytes": 200000,  // larger diffs are truncated, biggest files first
     "env": {}                  // extra environment for the command
@@ -111,6 +114,12 @@ All keys, with defaults:
   "cache":  { "enabled": true, "dir": null }  // default $XDG_CACHE_HOME/baby-bird
 }
 ```
+
+### While it generates
+
+On a terminal, `bb` shows a small live status block on stderr (stdout stays clean for piping): a spinner with the current stage and elapsed time, then, for Claude presets, a reasoning indicator, and finally each section title as the answer takes shape. If the CLI rejects an answer against the schema you see that too, and the section list starts over when the model resubmits. When the tour lands the block is replaced by one dim summary line (time, tokens, model). Turn it off with `--no-progress`; it is also off when stderr is not a TTY or `--debug` is on.
+
+About that reasoning indicator: Claude Code's print mode (2.1.x) streams thinking *heartbeats* roughly every second but with empty text, both in the deltas and in the final message, so `bb` shows a pulse trail that grows with each heartbeat rather than the words. The rolling text window is implemented and takes over automatically whenever a runner does include reasoning text.
 
 ### LLM presets
 
@@ -145,6 +154,10 @@ bb --preset local
 BB_LLM_COMMAND='llm -m gpt-4.1' bb
 ```
 
+Presets have a `kind`. The built-in Claude presets are `"claude"`: `bb` appends `--output-format stream-json --verbose --include-partial-messages` so the status block can show reasoning heartbeats and section titles as they stream; the answer text is then extracted like any other (fences, prose, and the odd unescaped quote are tolerated, with one repair round-trip if needed). Everything else is `"plain"`: stdout is the answer. Set `"kind": "claude"` on your own preset when it wraps the Claude Code CLI, or `llm.kind` to override for a run.
+
+`llm.jsonSchema: true` additionally passes `--json-schema` so the CLI validates the answer itself. It is off by default: on Claude Code 2.1.270 the model's first structured call is rejected about five times in six (it emits tool-call placeholders such as `$PARAMETER_NAME` as top-level keys), and although the CLI makes it retry, every rejection costs a full extra answer. Worth re-checking on newer versions.
+
 The effective command is part of the cache key, so switching presets regenerates the tour instead of reusing another model's.
 
 ### Excerpt highlighting
@@ -177,7 +190,7 @@ bb cache path
 
 ## Using it as a library
 
-The CLI is one consumer of a small core. `import { generateTour, CliRenderer, type Tour } from 'baby-bird'` gives you the same pipeline for a TUI, a web view, or a bot; a `Tour` is plain JSON (sections, stats, excerpts) with no git or LLM dependencies.
+The CLI is one consumer of a small core. `import { generateTour, CliRenderer, type Tour } from '@cam5/baby-bird'` gives you the same pipeline for a TUI, a web view, or a bot; a `Tour` is plain JSON (sections, stats, excerpts) with no git or LLM dependencies.
 
 ## Development
 
@@ -187,6 +200,15 @@ pnpm dev -- --help     # run from source
 pnpm test              # vitest: unit + integration (uses temp git repos and a fake LLM)
 pnpm typecheck
 pnpm build             # dist/ via tsup
+```
+
+## Releasing
+
+Releases are cut by pushing a version tag. The `release` workflow checks that the tag matches `package.json`, runs typecheck, tests and build, publishes to npm with provenance (via npm trusted publishing, so no token is stored), and creates a GitHub Release with generated notes.
+
+```sh
+npm version patch        # or minor / major: bumps package.json, commits, tags vX.Y.Z
+git push --follow-tags
 ```
 
 ## Exit codes
