@@ -2,7 +2,7 @@
 
 Guided **code tours** for git changes, on the command line.
 
-`bb` looks at a change (a branch, a range, or your working tree), asks an LLM to organize it into an ordered set of sections, and renders the result in your terminal: each section has a title, a description of *why* and *what*, the files it touches with `+/-` counts, and excerpts pulled from the real diff. Tours are cached by content, so the model runs once per change.
+`bb` looks at a change (a branch, a range, a pull request by number, or your working tree), asks an LLM to organize it into an ordered set of sections, and renders the result in your terminal: each section has a title, a description of *why* and *what*, the files it touches with `+/-` counts, and excerpts pulled from the real diff. Tours are cached by content, so the model runs once per change.
 
 ```
 🐣 Add a shell-command LLM provider with presets
@@ -42,6 +42,8 @@ Contents
 pnpm add -g @cam5/baby-bird     # or: npm i -g @cam5/baby-bird
 bb --help
 ```
+
+Upgrading is the same command. Tab completion for zsh and bash is optional and one line to set up: see [Shell completion](#shell-completion).
 
 Requirements: Node 22+, git, and some CLI that can answer a prompt (by default the [Claude Code](https://claude.com/claude-code) CLI, `claude`).
 
