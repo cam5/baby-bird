@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { UsageError } from '../../src/core/errors.js';
 import type { Tour } from '../../src/core/types.js';
-import { CliRenderer, relativeTime, wrap } from '../../src/render/cli.js';
+import { CliRenderer, describeSource, relativeTime, wrap } from '../../src/render/cli.js';
 
 const tour: Tour = {
   version: 1,
@@ -115,5 +115,13 @@ describe('relativeTime', () => {
     expect(relativeTime('2026-01-01T11:30:00Z', now)).toBe('30 min ago');
     expect(relativeTime('2026-01-01T02:00:00Z', now)).toBe('10 h ago');
     expect(relativeTime('2025-12-20T12:00:00Z', now)).toBe('12 days ago');
+  });
+});
+
+describe('describeSource', () => {
+  it('says where a numbered pull request came from', () => {
+    const range = { kind: 'range' as const, base: 'origin/part-1', head: 'PR #2', baseSha: 'a'.repeat(40), headSha: 'b'.repeat(40) };
+    expect(describeSource({ ...range, resolvedBy: 'pull-request-remote' })).toBe('PR #2 vs origin/part-1 · both ends as on the remote');
+    expect(describeSource({ ...range, mergeBase: 'abcdef0123', resolvedBy: 'pull-request-test-merge' })).toBe("PR #2 vs origin/part-1 (merge-base abcdef0) · base read from GitHub's test merge");
   });
 });

@@ -53,6 +53,8 @@ bb main..feature       tour an explicit range
 bb main...feature      same, from the merge-base
 bb HEAD~3              tour the last three commits
 bb release/2.0         what HEAD adds on top of release/2.0 (merge-base semantics)
+bb 12                  pull request #12: its base against its head, as they are on the remote
+bb --pr 12             the same, spelled so it can never be taken for a ref
 bb --working           uncommitted changes (tracked + untracked)
 bb --staged            what you are about to commit
 bb --section 2         render only the second section
@@ -74,6 +76,28 @@ bb ask HEAD~1 "what is going on in progress.ts?" chat about a specific range
 
 The header of every tour says which one was used.
 
+### Touring a pull request by number
+
+```
+bb 12                                          pull request #12
+bb '#12'                                       the same (quote it: an unquoted # starts a comment in most shells)
+bb https://github.com/you/repo/pull/12         the same; anything after the number (/files, #diff-...) is ignored
+bb --pr 12                                     the same, never mistaken for a ref
+bb ask 12 "what should I look at first?"       chat about it
+```
+
+This diffs the PR's **base branch against its head, both as they are on the remote right now**, starting from where the two diverged, which is what the PR page on GitHub shows. You need neither branch checked out or up to date, and the base comes from the pull request itself, so a stacked PR (PR 13 opened against PR 12's branch) shows only its own changes. Nothing is checked out and no branch is created; the commits are fetched into the object store, and fetching the base branch can move its remote-tracking ref (`origin/<base>`) forward, as any `git fetch` of that branch would.
+
+How it finds the two ends:
+
+- **Head**: plain git. `git ls-remote` and `git fetch` read `refs/pull/12/head` from the repository's own remote, with whatever credentials git already uses there. The remote is `origin` (or the only remote, or else `upstream`); a PR URL picks the remote that points at that repository.
+- **Base**: the name of the base branch is only known to GitHub's API, so this is the one thing `gh` is asked for (`gh pr view 12`), along with the title and description for the prompt. The branch itself is then read from the remote with git. For a merged or closed PR the base is the commit GitHub recorded for it, since the branch as it is today may already contain the PR.
+- **When `gh` cannot answer** (not installed, not logged in, or logged in as an account that cannot see the repository), `bb` reads the base off GitHub's test merge instead: `refs/pull/12/merge` is a merge commit whose first parent is the base branch, and it is used only when its second parent is the PR's current head. The tour then says `base read from GitHub's test merge`, a warning explains why, and the prompt goes without the PR's title and description. If there is no usable test merge either (the PR is closed or has conflicts), `bb` stops and tells you which account or token to fix, and how to give the base by hand.
+
+`gh` runs as whichever account it is using. To use another one for a single run, set `GH_TOKEN`, which `gh` honors over the logged-in account: `GH_TOKEN=$(gh auth token --user other-account) bb 12`.
+
+**A bare number that is also a ref name.** `bb 12` is a pull request unless a local branch or tag is named exactly `12`. In that case the ref wins, because that is what `bb 12` meant before and the name is one you made, and a warning points you at `bb --pr 12` and `bb '#12'`, which always mean the pull request. An abbreviated commit sha made only of digits does not count as a name: `bb 1234567` is pull request 1234567. To compare against that commit, write `bb 1234567...`.
+
 ### Asking questions about a tour
 
 `bb ask` opens an interactive chat with the same LLM CLI, primed with the tour:
@@ -87,7 +111,7 @@ bb ask --staged "is this safe to commit?"
 bb ask --dump-context                        print what the chat would be given, and exit
 ```
 
-It takes the same range arguments and flags as `bb`, then an opening message. The first word is treated as a range only when git can resolve it (`HEAD~3`, `main..feature`); anything else is part of the message, so quoting is optional for plain questions.
+It takes the same range arguments and flags as `bb`, then an opening message. The first word is treated as a range only when git can resolve it (`HEAD~3`, `main..feature`) or it is a pull request (`12`, `#12`, a PR URL); anything else is part of the message, so quoting is optional for plain questions. A question that starts with a bare number (`bb ask 3 things confuse me`) needs quotes around the whole question.
 
 The tour is generated first, or taken from the cache: run `bb HEAD~1` in one window, and `bb ask HEAD~1 ...` in another reuses that tour and opens the chat straight away. The chat gets, as a system prompt: a short framing, the whole tour (sections, descriptions, excerpts with line numbers, the base and head SHAs), and then the same labeled diff the tour was built from, shortened to `llm.maxPromptBytes` like the prompt. With the Claude presets the chat is a normal interactive Claude Code session in the repository, so it can also open files and run git. `bb ask` exits with the chat's exit code.
 
@@ -195,7 +219,7 @@ Excerpts get language-aware token colors (keywords, strings, comments) chosen by
 
 ### Code host
 
-With `codehost.provider` set to `gh` (the default), `bb` uses the `gh` CLI to find the current branch's pull request. Its base branch decides what to compare against and its title and body are included in the prompt. Nothing else is read, and no tokens are handled by `bb`. If `gh` is missing or not logged in, the lookup is silently skipped. Set the provider to `none` to turn it off.
+With `codehost.provider` set to `gh` (the default), `bb` uses the `gh` CLI to find the current branch's pull request, or the one you named by number. Its base branch decides what to compare against and its title and body are included in the prompt. Nothing else is read, and no tokens are handled by `bb`. For bare `bb`, the lookup is silently skipped if `gh` is missing or not logged in. For `bb 12`, see [Touring a pull request by number](#touring-a-pull-request-by-number) for what happens then. Set the provider to `none` to turn it off; `bb 12` then relies on the test merge alone.
 
 ### Cache
 
@@ -246,7 +270,7 @@ git push --follow-tags
 |---|---|
 | 0 | ok |
 | 2 | usage or configuration error |
-| 3 | not a git repository, or nothing to tour |
+| 3 | not a git repository, nothing to tour, or a pull request that could not be read |
 | 4 | the LLM command failed to run |
 | 5 | the model's output was unusable even after a repair attempt |
 

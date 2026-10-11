@@ -11,6 +11,10 @@ export interface GitOptions {
   cwd: string;
   /** Resolve instead of throwing on a nonzero exit code. */
   allowFailure?: boolean;
+  /** Extra environment variables for this call. */
+  env?: Record<string, string>;
+  /** Kill the command after this long; a timeout counts as a failure. */
+  timeoutMs?: number;
 }
 
 const MAX_BUFFER = 512 * 1024 * 1024;
@@ -18,13 +22,15 @@ const MAX_BUFFER = 512 * 1024 * 1024;
 /** Run git with the given args; throws GitError on nonzero exit unless allowFailure. */
 export function git(args: string[], opts: GitOptions): Promise<GitResult> {
   return new Promise((resolve, reject) => {
-    execFile('git', args, { cwd: opts.cwd, maxBuffer: MAX_BUFFER, encoding: 'utf8' }, (err, stdout, stderr) => {
-      const e = err as (NodeJS.ErrnoException & { code?: number | string }) | null;
+    const env = opts.env ? { ...process.env, ...opts.env } : process.env;
+    execFile('git', args, { cwd: opts.cwd, maxBuffer: MAX_BUFFER, encoding: 'utf8', env, timeout: opts.timeoutMs }, (err, stdout, stderr) => {
+      const e = err as (NodeJS.ErrnoException & { code?: number | string; killed?: boolean }) | null;
       if (e && e.code === 'ENOENT') {
         reject(new GitError('git executable not found', { hint: 'Install git and make sure it is on your PATH.' }));
         return;
       }
       const code = e ? (typeof e.code === 'number' ? e.code : 1) : 0;
+      if (e?.killed && opts.timeoutMs) stderr = `${stderr}\ntimed out after ${Math.round(opts.timeoutMs / 1000)}s`;
       if (code !== 0 && !opts.allowFailure) {
         const detail = stderr.trim() || stdout.trim() || `exit code ${code}`;
         reject(new GitError(`git ${args.slice(0, 2).join(' ')} failed: ${detail}`));

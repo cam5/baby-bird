@@ -3,7 +3,7 @@ import { GhCodeHost } from './gh.js';
 import { NoCodeHost } from './none.js';
 import type { CodeHost } from './provider.js';
 
-export type { CodeHost } from './provider.js';
+export type { CodeHost, PullRequestLookup, PullRequestLookupFailure } from './provider.js';
 export { GhCodeHost } from './gh.js';
 export { NoCodeHost } from './none.js';
 

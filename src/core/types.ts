@@ -60,9 +60,25 @@ export interface PullRequestInfo {
   url: string;
   baseRefName: string;
   headRefName: string;
+  /** "OPEN", "MERGED" or "CLOSED", when the code host said. */
+  state?: string;
+  /** Tip of the base branch as the code host last recorded it (for a merged PR: just before the merge). */
+  baseRefOid?: string;
+  headRefOid?: string;
 }
 
-export type RangeResolvedBy = 'explicit' | 'pull-request' | 'ancestor-branch' | 'default-branch';
+/**
+ * How a range was chosen. `pull-request` is the current branch's PR (local HEAD against the PR's base);
+ * `pull-request-remote` is a PR named by number, both ends fetched from the remote;
+ * `pull-request-test-merge` is the same, with the base read off GitHub's test merge because the code host could not be asked.
+ */
+export type RangeResolvedBy =
+  | 'explicit'
+  | 'pull-request'
+  | 'pull-request-remote'
+  | 'pull-request-test-merge'
+  | 'ancestor-branch'
+  | 'default-branch';
 export type WorkingResolvedBy = 'explicit' | 'dirty-tree';
 
 export type TourSource =
