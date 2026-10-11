@@ -6,6 +6,7 @@ import { LiveProgress, loggingProgress } from './progress.js';
 import { openSession, resolveHighlight, terminalWidth, type GlobalFlags } from './shared.js';
 
 export interface TourFlags extends GlobalFlags {
+  pr?: string;
   working?: boolean;
   staged?: boolean;
   section?: number;
@@ -29,7 +30,7 @@ export async function tourCommand(rangeArg: string | undefined, flags: TourFlags
     cwd: session.root,
     config,
     cacheDir: session.loaded.cacheDir,
-    range: { arg: rangeArg, working: flags.working, staged: flags.staged },
+    range: { arg: rangeArg, pr: flags.pr, working: flags.working, staged: flags.staged },
     refresh: flags.refresh,
     noCache: flags.cache === false,
     debug: session.debug,

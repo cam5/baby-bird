@@ -23,6 +23,11 @@ export class TempRepo {
     return repo;
   }
 
+  /** Wrap a repository that already exists (a clone made by a test). */
+  static at(dir: string): TempRepo {
+    return new TempRepo(dir);
+  }
+
   git(...args: string[]): string {
     return execFileSync('git', args, { cwd: this.dir, env: GIT_ENV, encoding: 'utf8' });
   }

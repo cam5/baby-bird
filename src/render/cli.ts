@@ -147,9 +147,11 @@ export function describeSource(source: TourSource): string {
   }
   const how =
     source.resolvedBy === 'pull-request' ? 'base from pull request'
-      : source.resolvedBy === 'ancestor-branch' ? 'nearest ancestor branch'
-        : source.resolvedBy === 'default-branch' ? 'default branch'
-          : null;
+      : source.resolvedBy === 'pull-request-remote' ? 'both ends as on the remote'
+        : source.resolvedBy === 'pull-request-test-merge' ? "base read from GitHub's test merge"
+          : source.resolvedBy === 'ancestor-branch' ? 'nearest ancestor branch'
+            : source.resolvedBy === 'default-branch' ? 'default branch'
+              : null;
   const mb = source.mergeBase ? ` (merge-base ${source.mergeBase.slice(0, 7)})` : '';
   return `${source.head} vs ${source.base}${mb}${how ? ` · ${how}` : ''}`;
 }

@@ -64,6 +64,7 @@ export async function prepareTour(opts: TourOptions): Promise<PreparedTour> {
     defaultBranch: config.git.defaultBranch,
     codehost,
     debug,
+    warn,
   });
   debug(`source: ${JSON.stringify(resolved.source)}`);
 

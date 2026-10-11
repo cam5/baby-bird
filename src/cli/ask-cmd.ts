@@ -4,6 +4,7 @@ import { resolveChat, resolveLlm } from '../core/config.js';
 import { ConfigError, NotARepoError } from '../core/errors.js';
 import { generateTour, prepareTour } from '../core/tour.js';
 import { git } from '../git/exec.js';
+import { parsePullRequestArg } from '../git/pr.js';
 import { chatSlots, launchChat } from '../llm/chat.js';
 import { describeSource, relativeTime } from '../render/cli.js';
 import { writeStdout } from '../render/pager.js';
@@ -11,6 +12,7 @@ import { LiveProgress, loggingProgress } from './progress.js';
 import { openSession, terminalWidth, type GlobalFlags } from './shared.js';
 
 export interface AskFlags extends GlobalFlags {
+  pr?: string;
   working?: boolean;
   staged?: boolean;
   refresh?: boolean;
@@ -25,7 +27,8 @@ export interface AskArgs {
 
 /**
  * `bb ask [range] [message...]`: the first word is a range only when git can resolve it
- * (`HEAD~1`, `main..feat`); otherwise every word is part of the opening message.
+ * (`HEAD~1`, `main..feat`) or it names a pull request (`12`, `#12`, a PR URL); otherwise every
+ * word is part of the opening message.
  */
 export async function splitAskArgs(words: string[], opts: { cwd: string; rangeAllowed: boolean }): Promise<AskArgs> {
   const [first, ...rest] = words;
@@ -37,6 +40,7 @@ export async function splitAskArgs(words: string[], opts: { cwd: string; rangeAl
 
 async function isRange(word: string, cwd: string): Promise<boolean> {
   if (!word || /\s/.test(word)) return false;
+  if (parsePullRequestArg(word)) return true;
   const res = await git(['rev-parse', '--quiet', '--end-of-options', word], { cwd, allowFailure: true });
   return res.code === 0;
 }
@@ -60,7 +64,7 @@ export async function askCommand(words: string[], flags: AskFlags): Promise<void
   }
   const llm = resolveLlm(config);
 
-  const { range, message } = await splitAskArgs(words, { cwd: session.root, rangeAllowed: !flags.working && !flags.staged });
+  const { range, message } = await splitAskArgs(words, { cwd: session.root, rangeAllowed: !flags.working && !flags.staged && flags.pr === undefined });
   session.debug(range ? `range: ${range}` : 'no range argument');
   session.debug(message ? `opening message: ${JSON.stringify(message)}` : 'no opening message');
 
@@ -73,7 +77,7 @@ export async function askCommand(words: string[], flags: AskFlags): Promise<void
     cwd: session.root,
     config,
     cacheDir: session.loaded.cacheDir,
-    range: { arg: range, working: flags.working, staged: flags.staged },
+    range: { arg: range, pr: flags.pr, working: flags.working, staged: flags.staged },
     refresh: flags.refresh,
     noCache: flags.cache === false,
     debug: session.debug,

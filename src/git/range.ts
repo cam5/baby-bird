@@ -2,10 +2,16 @@ import type { CodeHost } from '../codehost/provider.js';
 import { NoChangesError, UsageError } from '../core/errors.js';
 import type { PullRequestInfo, TourSource } from '../core/types.js';
 import { currentBranch, git, isDirty, localBranches, mergeBase, revParse } from './exec.js';
+import { isBareNumber, localRefNamed, parsePullRequestArg, requirePullRequestArg, resolvePullRequest, type PullRequestRef } from './pr.js';
 
 export interface RangeRequest {
-  /** Explicit range argument: "A..B", "A...B" or a single ref. */
+  /**
+   * Explicit range argument: "A..B", "A...B", a single ref, or a pull request ("12", "#12", a PR URL).
+   * A bare number is a pull request unless a local branch or tag has exactly that name.
+   */
   arg?: string;
+  /** A pull request by number or URL, with no ref-name ambiguity (`--pr`). */
+  pr?: string;
   working?: boolean;
   staged?: boolean;
 }
@@ -17,6 +23,7 @@ export interface ResolveOptions {
   defaultBranch: string | null;
   codehost: CodeHost;
   debug?: (msg: string) => void;
+  warn?: (msg: string) => void;
 }
 
 export interface ResolvedRange {
@@ -39,11 +46,17 @@ export async function resolveRange(req: RangeRequest, opts: ResolveOptions): Pro
 
   if (req.working && req.staged) throw new UsageError('--working and --staged are mutually exclusive.');
   if ((req.working || req.staged) && req.arg) throw new UsageError(`A range argument cannot be combined with --${req.working ? 'working' : 'staged'}.`);
+  if ((req.working || req.staged) && req.pr !== undefined) throw new UsageError(`--pr cannot be combined with --${req.working ? 'working' : 'staged'}.`);
+  if (req.pr !== undefined && req.arg) throw new UsageError(`--pr cannot be combined with a range argument (${req.arg}).`);
 
   if (req.staged) return { source: { kind: 'working', headSha, staged: true, resolvedBy: 'explicit' }, branch };
   if (req.working) return { source: { kind: 'working', headSha, staged: false, resolvedBy: 'explicit' }, branch };
 
+  if (req.pr !== undefined) return pullRequestRange(requirePullRequestArg(req.pr), branch, opts);
+
   if (req.arg) {
+    const pr = await pullRequestForArg(req.arg, opts);
+    if (pr) return pullRequestRange(pr, branch, opts);
     return { source: await explicitRange(req.arg, headSha, cwd), branch };
   }
 
@@ -92,6 +105,29 @@ export async function resolveRange(req: RangeRequest, opts: ResolveOptions): Pro
   );
 }
 
+/**
+ * Whether a range argument names a pull request. `#12` and PR URLs always do. A bare `12` does too,
+ * unless a local branch or tag is called exactly `12`: that name is something the user made here and it
+ * is what `bb 12` meant before pull requests could be named, so it wins, with a note on how to get the PR.
+ * (An all-digit abbreviated commit sha is not a name and does not win; write `1234567...` for that.)
+ */
+export async function pullRequestForArg(arg: string, opts: Pick<ResolveOptions, 'cwd' | 'warn'>): Promise<PullRequestRef | null> {
+  const pr = parsePullRequestArg(arg);
+  if (!pr || !isBareNumber(arg)) return pr;
+  const shadow = await localRefNamed(arg, opts.cwd);
+  if (!shadow) return pr;
+  opts.warn?.(`${arg} is a local ${shadow} here, so that is what is being toured. For pull request #${arg}, use \`bb --pr ${arg}\` or \`bb '#${arg}'\`.`);
+  return null;
+}
+
+async function pullRequestRange(ref: PullRequestRef, branch: string | null, opts: ResolveOptions): Promise<ResolvedRange> {
+  const pr = await resolvePullRequest(ref, { cwd: opts.cwd, codehost: opts.codehost, debug: opts.debug, warn: opts.warn });
+  const source = await rangeAtMergeBase(pr.baseSha, pr.headSha, pr.headLabel, pr.resolvedBy, opts.cwd, pr.baseLabel);
+  const resolved: ResolvedRange = { source, branch };
+  if (pr.pullRequest) resolved.pullRequest = pr.pullRequest;
+  return resolved;
+}
+
 async function explicitRange(arg: string, headSha: string, cwd: string): Promise<TourSource> {
   const three = arg.indexOf('...');
   const two = three === -1 ? arg.indexOf('..') : -1;
@@ -126,16 +162,17 @@ async function rangeAtMergeBase(
   headLabel: string,
   resolvedBy: Extract<TourSource, { kind: 'range' }>['resolvedBy'],
   cwd: string,
+  /** What to call the base when `base` is a sha rather than something the user typed. */
+  baseLabel: string = base,
 ): Promise<TourSource> {
   const baseTip = await requireRef(base, cwd);
   const mb = (await mergeBase(baseTip, headSha, cwd)) ?? baseTip;
   if (mb === headSha) {
-    throw new NoChangesError(
-      `${headLabel} has no commits on top of ${base}.`,
-      base === headLabel ? undefined : `Did you mean \`bb ${base}..${headLabel}\`?`,
-    );
+    // The "did you mean" only helps when both labels are refs the user could type back.
+    const typed = baseLabel === base && base !== headLabel;
+    throw new NoChangesError(`${headLabel} has no commits on top of ${baseLabel}.`, typed ? `Did you mean \`bb ${base}..${headLabel}\`?` : undefined);
   }
-  const source: TourSource = { kind: 'range', base, head: headLabel, baseSha: mb, headSha, resolvedBy };
+  const source: TourSource = { kind: 'range', base: baseLabel, head: headLabel, baseSha: mb, headSha, resolvedBy };
   if (mb !== baseTip) source.mergeBase = mb;
   return source;
 }

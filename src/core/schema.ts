@@ -47,7 +47,7 @@ const TourSourceSchema = z.discriminatedUnion('kind', [
     baseSha: z.string(),
     headSha: z.string(),
     mergeBase: z.string().optional(),
-    resolvedBy: z.enum(['explicit', 'pull-request', 'ancestor-branch', 'default-branch']),
+    resolvedBy: z.enum(['explicit', 'pull-request', 'pull-request-remote', 'pull-request-test-merge', 'ancestor-branch', 'default-branch']),
   }),
   z.object({
     kind: z.literal('working'),

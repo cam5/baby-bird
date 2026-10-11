@@ -34,6 +34,13 @@ export class GitError extends BbError {
   }
 }
 
+/** A pull request named by number or URL could not be turned into a range. */
+export class PullRequestError extends BbError {
+  constructor(message: string, hint?: string) {
+    super(message, { exitCode: 3, hint });
+  }
+}
+
 export class NoChangesError extends BbError {
   constructor(message: string, hint?: string) {
     super(message, { exitCode: 3, hint });

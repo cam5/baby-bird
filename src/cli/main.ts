@@ -47,7 +47,8 @@ program
   .showHelpAfterError('(run with --help for usage)');
 
 addGlobalFlags(program)
-  .argument('[range]', 'what to tour: A..B, A...B, or a single ref (compared at its merge-base with HEAD)')
+  .argument('[range]', 'what to tour: A..B, A...B, a single ref (compared at its merge-base with HEAD), or a pull request (12, #12, or its URL)')
+  .option('--pr <number|url>', 'tour a pull request, base and head as they are on the remote; unlike a bare number, never taken for a ref')
   .option('-w, --working', 'tour uncommitted changes in the working tree (tracked and untracked)')
   .option('-s, --staged', 'tour staged changes only')
   .option('--section <n>', 'render only section <n>', positiveInt)
@@ -65,6 +66,8 @@ Examples:
   bb                     tour the current branch (dirty tree, PR base, nearest branch, or default branch)
   bb main..feature       tour an explicit range
   bb HEAD~3              tour the last three commits
+  bb 12                  tour pull request #12: its base against its head, both fetched from the remote
+  bb --pr 12             the same, even if a local branch or tag is named 12
   bb --staged            tour what you are about to commit
   bb --section 2         show only the second section
   bb --json | jq         machine-readable output
@@ -79,6 +82,7 @@ Examples:
 addGlobalFlags(program.command('ask').description('chat with the LLM about a tour (the tour is generated or taken from the cache first)'))
   .argument('[range]', 'what to tour, as for `bb`; omit it to tour the same thing bare `bb` would')
   .argument('[message...]', 'opening message for the chat')
+  .option('--pr <number|url>', 'tour a pull request, base and head as they are on the remote')
   .option('-w, --working', 'tour uncommitted changes in the working tree (tracked and untracked)')
   .option('-s, --staged', 'tour staged changes only')
   .option('--refresh', 'ignore a cached tour and regenerate it')
@@ -88,13 +92,14 @@ addGlobalFlags(program.command('ask').description('chat with the LLM about a tou
   .addHelpText(
     'after',
     `
-The first word is taken as a range only when git can resolve it (HEAD~3, main..feature);
-everything else is the opening message. The chat command comes from the preset (see \`bb config\`).
+The first word is taken as a range only when git can resolve it (HEAD~3, main..feature) or it is a
+pull request (12, #12, a PR URL); everything else is the opening message. The chat command comes from the preset (see \`bb config\`).
 
 Examples:
   bb ask                                     chat about the current branch's tour
   bb ask "why does the cache key include the command?"
   bb ask HEAD~1 "what is going on in progress.ts?"
+  bb ask 12 "what should I look at first?"   chat about pull request #12
   bb ask main..feature --preset claude-opus
   bb ask --staged "is this safe to commit?"
 `,
