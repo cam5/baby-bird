@@ -67,6 +67,7 @@ bb --dump-prompt       print the prompt instead of calling the model
 bb --refresh           regenerate even if a cached tour exists
 bb --preset claude-sonnet
 bb --no-progress       no live status block
+bb completion zsh      print a tab-completion script (see Shell completion)
 bb ask "why is the cache keyed by command?"      chat about the current branch's tour
 bb ask HEAD~1 "what is going on in progress.ts?" chat about a specific range
 ```
@@ -133,6 +134,38 @@ How it finds the two ends:
 `gh` runs as whichever account it is using. To use another one for a single run, set `GH_TOKEN`, which `gh` honors over the logged-in account: `GH_TOKEN=$(gh auth token --user other-account) bb 12`.
 
 **A bare number that is also a ref name.** `bb 12` is a pull request unless a local branch or tag is named exactly `12`. In that case the ref wins, because that is what `bb 12` meant before and the name is one you made, and a warning points you at `bb --pr 12` and `bb '#12'`, which always mean the pull request. An abbreviated commit sha made only of digits does not count as a name: `bb 1234567` is pull request 1234567. To compare against that commit, write `bb --base 1234567`.
+
+### Shell completion
+
+`bb completion zsh` (or `bash`) prints a completion script. It installs nothing by itself and never touches your shell's startup files; pick one of these:
+
+```sh
+# zsh, with Homebrew set up the usual way (brew shellenv puts this directory on fpath)
+bb completion zsh > "$(brew --prefix)/share/zsh/site-functions/_bb"
+
+# zsh, anywhere: any directory that ~/.zshrc adds to fpath before compinit runs
+bb completion zsh > ~/.zfunc/_bb          # with  fpath=(~/.zfunc $fpath)  in ~/.zshrc
+
+# zsh or bash, one line in ~/.zshrc (after compinit) or ~/.bashrc; starts bb with every new shell
+source <(bb completion zsh)
+source <(bb completion bash)              # eval "$(bb completion bash)" on macOS's bash 3.2
+
+# bash with bash-completion 2
+bb completion bash > ~/.local/share/bash-completion/completions/bb
+```
+
+Open a new shell afterwards (for zsh, delete `~/.zcompdump*` if nothing happens), and write the file again after upgrading `bb`: the script lists the flags of the version that printed it.
+
+What Tab completes:
+
+- subcommands and flags, with descriptions in zsh;
+- branches, remote branches, tags and any other ref, wherever a range goes and after `--base`/`--head`, including the second half of `main..` and `main...`;
+- open pull request numbers with their titles (zsh) wherever a range goes and after `--pr`, also after a `#`;
+- built-in preset names after `--preset`, directories after `-C`, and all of the above for the repository `-C <dir>` points at.
+
+Completion is a shell function that runs `git for-each-ref` and reads a file; it never starts `bb` or node. Pull request numbers come from `gh pr list`, and Tab does not wait for it: the list is cached per repository under `$XDG_CACHE_HOME/baby-bird/completion/`, a cache older than a minute is still used and is refreshed in the background, and that background `gh` is stopped after ten seconds. The one wait is the first Tab ever pressed in a repository, which gives `gh` up to a second so the numbers can appear right away. If `gh` is missing, logged out, cannot see the repository or is slow, you get refs and no numbers, with no message; a failure is cached too, so `gh` is retried once a minute rather than on every Tab. `BB_COMPLETION_PRS=0` turns the `gh` part off.
+
+Limits: user-defined presets are not completed, bash shows pull request numbers without titles, and bash leaves out ref names containing characters the shell would act on (it inserts candidates unquoted). There is no fish script.
 
 ### Asking questions about a tour
 

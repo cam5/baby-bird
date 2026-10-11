@@ -4,6 +4,7 @@ import pc from 'picocolors';
 import pkg from '../../package.json' with { type: 'json' };
 import { BadLlmOutputError, BbError } from '../core/errors.js';
 import { cacheClearCommand, cacheLsCommand, cachePathCommand } from './cache-cmd.js';
+import { COMPLETION_HELP, COMPLETION_SHELLS, completionCommand } from './completion/index.js';
 import { configCommand } from './config-cmd.js';
 import { askCommand } from './ask-cmd.js';
 import { initCommand } from './init-cmd.js';
@@ -153,6 +154,13 @@ addGlobalFlags(program.command('config').description('show the effective configu
 addGlobalFlags(program.command('init').description('write a starter .baby-bird/config.json in this repository'))
   .option('--force', 'overwrite an existing project config')
   .action((_flags, cmd: Command) => initCommand(optsWithGlobals(cmd)));
+
+program
+  .command('completion')
+  .description('print a shell completion script (zsh or bash) to install yourself')
+  .argument('[shell]', `${COMPLETION_SHELLS.join(' or ')}; defaults to the shell named by $SHELL`)
+  .addHelpText('after', COMPLETION_HELP)
+  .action((shell: string | undefined) => completionCommand(shell, program, pkg.version));
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const debug = process.argv.includes('--debug');
