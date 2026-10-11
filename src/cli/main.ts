@@ -29,6 +29,27 @@ function addGlobalFlags(cmd: Command): Command {
     .option('--debug', 'print diagnostics (resolved range, prompt size, raw model output) to stderr');
 }
 
+/** The one place that spells out what each range form compares; shown by `bb --help` and `bb ask --help`. */
+const COMPARISON_HELP = `
+What gets compared (every tour is a diff from an old side to a new side):
+
+  bb --base A                     HEAD against the commit where it forked from A:
+  bb A                            "what did I add on top of A?"
+
+  bb --base A --head B            B against the commit where it forked from A:
+  bb A...B                        "what would a pull request of B into A show?"
+
+  bb --base A --head B --direct   B against A exactly as A is now; commits A gained since B
+  bb A..B                         forked show up too, backwards, as if B had removed them
+
+  bb 12                           pull request #12: its head against where it forked from its
+                                  base branch, both read from the remote
+
+  Each pair is two spellings of the same comparison. A..B and A...B only differ when A
+  has moved on since B forked from it. An empty side means HEAD (A.. is A..HEAD).
+  This follows \`git diff\`; in \`git log\` the dots mean something else.
+`;
+
 // A reader that quits early (`bb | head`) is a normal end, not a crash.
 process.stdout.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EPIPE') process.exit(0);
@@ -47,7 +68,10 @@ program
   .showHelpAfterError('(run with --help for usage)');
 
 addGlobalFlags(program)
-  .argument('[range]', 'what to tour: A..B, A...B, a single ref (compared at its merge-base with HEAD), or a pull request (12, #12, or its URL)')
+  .argument('[range]', 'what to tour: a ref, A...B, A..B, or a pull request (12, #12, or its URL); see "What gets compared" below')
+  .option('--base <ref>', 'what to compare against: tour what --head (default HEAD) added since it forked from <ref>')
+  .option('--head <ref>', 'the commit to tour instead of HEAD; without --base it is compared against the default branch')
+  .option('--direct', 'with --base/--head: compare the two exactly as they are now, not from where they forked')
   .option('--pr <number|url>', 'tour a pull request, base and head as they are on the remote; unlike a bare number, never taken for a ref')
   .option('-w, --working', 'tour uncommitted changes in the working tree (tracked and untracked)')
   .option('-s, --staged', 'tour staged changes only')
@@ -62,12 +86,16 @@ addGlobalFlags(program)
   .addHelpText(
     'after',
     `
+${COMPARISON_HELP}
 Examples:
   bb                     tour the current branch (dirty tree, PR base, nearest branch, or default branch)
-  bb main..feature       tour an explicit range
+  bb --base main         what this branch adds on top of main
+  bb --base main --head feature
+                         what feature adds on top of main, without checking it out
   bb HEAD~3              tour the last three commits
   bb 12                  tour pull request #12: its base against its head, both fetched from the remote
-  bb --pr 12             the same, even if a local branch or tag is named 12
+  bb 12 --base main      pull request #12 against main instead of its own base (a whole stack at once)
+  bb --pr 12             pull request #12 even if a local branch or tag is named 12
   bb --staged            tour what you are about to commit
   bb --section 2         show only the second section
   bb --json | jq         machine-readable output
@@ -82,6 +110,9 @@ Examples:
 addGlobalFlags(program.command('ask').description('chat with the LLM about a tour (the tour is generated or taken from the cache first)'))
   .argument('[range]', 'what to tour, as for `bb`; omit it to tour the same thing bare `bb` would')
   .argument('[message...]', 'opening message for the chat')
+  .option('--base <ref>', 'what to compare against: tour what --head (default HEAD) added since it forked from <ref>')
+  .option('--head <ref>', 'the commit to tour instead of HEAD; without --base it is compared against the default branch')
+  .option('--direct', 'with --base/--head: compare the two exactly as they are now, not from where they forked')
   .option('--pr <number|url>', 'tour a pull request, base and head as they are on the remote')
   .option('-w, --working', 'tour uncommitted changes in the working tree (tracked and untracked)')
   .option('-s, --staged', 'tour staged changes only')
@@ -93,13 +124,15 @@ addGlobalFlags(program.command('ask').description('chat with the LLM about a tou
     'after',
     `
 The first word is taken as a range only when git can resolve it (HEAD~3, main..feature) or it is a
-pull request (12, #12, a PR URL); everything else is the opening message. The chat command comes from the preset (see \`bb config\`).
-
+pull request (12, #12, a PR URL); everything else is the opening message. With --base, --head or --pr
+every word is the message. The chat command comes from the preset (see \`bb config\`).
+${COMPARISON_HELP}
 Examples:
   bb ask                                     chat about the current branch's tour
   bb ask "why does the cache key include the command?"
   bb ask HEAD~1 "what is going on in progress.ts?"
   bb ask 12 "what should I look at first?"   chat about pull request #12
+  bb ask --base main --head feature "is the migration reversible?"
   bb ask main..feature --preset claude-opus
   bb ask --staged "is this safe to commit?"
 `,

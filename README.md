@@ -49,12 +49,16 @@ Requirements: Node 22+, git, and some CLI that can answer a prompt (by default t
 
 ```
 bb                     tour the current branch
-bb main..feature       tour an explicit range
-bb main...feature      same, from the merge-base
+bb --base main         what this branch adds on top of main
+bb --base main --head feature
+                       what feature adds on top of main, without checking it out
+bb main...feature      the same comparison in git's range syntax
+bb main..feature       feature against main exactly as main is now (see below)
 bb HEAD~3              tour the last three commits
-bb release/2.0         what HEAD adds on top of release/2.0 (merge-base semantics)
+bb release/2.0         what HEAD adds on top of release/2.0; same as --base release/2.0
 bb 12                  pull request #12: its base against its head, as they are on the remote
 bb --pr 12             the same, spelled so it can never be taken for a ref
+bb 12 --base main      pull request #12 against main instead of its own base
 bb --working           uncommitted changes (tracked + untracked)
 bb --staged            what you are about to commit
 bb --section 2         render only the second section
@@ -76,6 +80,38 @@ bb ask HEAD~1 "what is going on in progress.ts?" chat about a specific range
 
 The header of every tour says which one was used.
 
+### What exactly gets compared
+
+Every tour is a diff from an old side to a new side. There are three comparisons, and each can be written with flags or with git's range syntax:
+
+| you want | flags | range syntax | old side | new side |
+|---|---|---|---|---|
+| what did this branch add on top of `A`? | `bb --base A` | `bb A` or `bb A...` | the commit where `HEAD` forked from `A` | `HEAD` |
+| what would a pull request of `B` into `A` show? | `bb --base A --head B` | `bb A...B` | the commit where `B` forked from `A` | `B` |
+| how does `B` differ from `A` as `A` is right now? | `bb --base A --head B --direct` | `bb A..B` | `A` | `B` |
+
+The first two are the same comparison; the first just has `HEAD` as the new side. The difference between three dots and two only shows when `A` has moved on since `B` forked from it:
+
+```
+          o---o---o   feature
+         /
+o---o---F---o---o     main
+```
+
+- `bb --base main --head feature` (`bb main...feature`) compares `F` with `feature`: the three commits made on `feature`, nothing else. This is what a pull request shows, and almost always what you want to review.
+- `bb --base main --head feature --direct` (`bb main..feature`) compares the tip of `main` with `feature`. You get the three `feature` commits, and also the two newer `main` commits backwards, as if `feature` had removed them. Useful for "what will the tree look like if I switch from `main` to `feature`?".
+
+If `main` has not moved since `feature` forked, the two are identical.
+
+Other things worth knowing:
+
+- An empty side means `HEAD`: `bb main..` is `bb main..HEAD`.
+- `bb --head feature` with no `--base` compares against the default branch (`origin/HEAD`, or `main`/`master`/`trunk`, or `git.defaultBranch`).
+- `--base`/`--head` take anything git resolves to a commit: branches, `origin/main`, tags, `HEAD~3`, shas. They cannot be mixed with a range argument, `--working` or `--staged`.
+- With a pull request, `--base` replaces the PR's own base and `--head` is refused, since the pull request is the head: `bb 12 --base main` tours everything between `main` and PR 12, which for a stack is every PR up to and including it. The name is looked up as a branch on the remote first (read fresh, like the PR), then as a local ref.
+- The dots follow `git diff`. `git log A..B` means something different again (the commits in `B` that are not in `A`), which is where much of the confusion comes from.
+- The first line of every tour says what was compared: `feature vs main (merge-base 4e2a1c9)` when the old side is the fork point, plain `feature vs main` when it is `main` itself.
+
 ### Touring a pull request by number
 
 ```
@@ -92,11 +128,11 @@ How it finds the two ends:
 
 - **Head**: plain git. `git ls-remote` and `git fetch` read `refs/pull/12/head` from the repository's own remote, with whatever credentials git already uses there. The remote is `origin` (or the only remote, or else `upstream`); a PR URL picks the remote that points at that repository.
 - **Base**: the name of the base branch is only known to GitHub's API, so this is the one thing `gh` is asked for (`gh pr view 12`), along with the title and description for the prompt. The branch itself is then read from the remote with git. For a merged or closed PR the base is the commit GitHub recorded for it, since the branch as it is today may already contain the PR.
-- **When `gh` cannot answer** (not installed, not logged in, or logged in as an account that cannot see the repository), `bb` reads the base off GitHub's test merge instead: `refs/pull/12/merge` is a merge commit whose first parent is the base branch, and it is used only when its second parent is the PR's current head. The tour then says `base read from GitHub's test merge`, a warning explains why, and the prompt goes without the PR's title and description. If there is no usable test merge either (the PR is closed or has conflicts), `bb` stops and tells you which account or token to fix, and how to give the base by hand.
+- **When `gh` cannot answer** (not installed, not logged in, or logged in as an account that cannot see the repository), `bb` reads the base off GitHub's test merge instead: `refs/pull/12/merge` is a merge commit whose first parent is the base branch, and it is used only when its second parent is the PR's current head. The tour then says `base read from GitHub's test merge`, a warning explains why, and the prompt goes without the PR's title and description. If there is no usable test merge either (the PR is closed or has conflicts), `bb` stops and tells you which account or token to fix. You can also name the base yourself, which needs no API at all: `bb 12 --base <branch>`.
 
 `gh` runs as whichever account it is using. To use another one for a single run, set `GH_TOKEN`, which `gh` honors over the logged-in account: `GH_TOKEN=$(gh auth token --user other-account) bb 12`.
 
-**A bare number that is also a ref name.** `bb 12` is a pull request unless a local branch or tag is named exactly `12`. In that case the ref wins, because that is what `bb 12` meant before and the name is one you made, and a warning points you at `bb --pr 12` and `bb '#12'`, which always mean the pull request. An abbreviated commit sha made only of digits does not count as a name: `bb 1234567` is pull request 1234567. To compare against that commit, write `bb 1234567...`.
+**A bare number that is also a ref name.** `bb 12` is a pull request unless a local branch or tag is named exactly `12`. In that case the ref wins, because that is what `bb 12` meant before and the name is one you made, and a warning points you at `bb --pr 12` and `bb '#12'`, which always mean the pull request. An abbreviated commit sha made only of digits does not count as a name: `bb 1234567` is pull request 1234567. To compare against that commit, write `bb --base 1234567`.
 
 ### Asking questions about a tour
 
@@ -107,11 +143,12 @@ bb ask                                       the tour bare `bb` would show
 bb ask "where is the retry handled?"         with an opening question
 bb ask HEAD~1 "what is going on in progress.ts?"
 bb ask main..feature --preset claude-opus
+bb ask --base main --head feature "is the migration reversible?"
 bb ask --staged "is this safe to commit?"
 bb ask --dump-context                        print what the chat would be given, and exit
 ```
 
-It takes the same range arguments and flags as `bb`, then an opening message. The first word is treated as a range only when git can resolve it (`HEAD~3`, `main..feature`) or it is a pull request (`12`, `#12`, a PR URL); anything else is part of the message, so quoting is optional for plain questions. A question that starts with a bare number (`bb ask 3 things confuse me`) needs quotes around the whole question.
+It takes the same range arguments and flags as `bb`, then an opening message. The first word is treated as a range only when git can resolve it (`HEAD~3`, `main..feature`) or it is a pull request (`12`, `#12`, a PR URL); anything else is part of the message, so quoting is optional for plain questions. A question that starts with a bare number (`bb ask 3 things confuse me`) needs quotes around the whole question. With `--base`, `--head` or `--pr`, every word is the message.
 
 The tour is generated first, or taken from the cache: run `bb HEAD~1` in one window, and `bb ask HEAD~1 ...` in another reuses that tour and opens the chat straight away. The chat gets, as a system prompt: a short framing, the whole tour (sections, descriptions, excerpts with line numbers, the base and head SHAs), and then the same labeled diff the tour was built from, shortened to `llm.maxPromptBytes` like the prompt. With the Claude presets the chat is a normal interactive Claude Code session in the repository, so it can also open files and run git. `bb ask` exits with the chat's exit code.
 

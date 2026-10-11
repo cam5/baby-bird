@@ -7,6 +7,9 @@ import { openSession, resolveHighlight, terminalWidth, type GlobalFlags } from '
 
 export interface TourFlags extends GlobalFlags {
   pr?: string;
+  base?: string;
+  head?: string;
+  direct?: boolean;
   working?: boolean;
   staged?: boolean;
   section?: number;
@@ -30,7 +33,7 @@ export async function tourCommand(rangeArg: string | undefined, flags: TourFlags
     cwd: session.root,
     config,
     cacheDir: session.loaded.cacheDir,
-    range: { arg: rangeArg, pr: flags.pr, working: flags.working, staged: flags.staged },
+    range: { arg: rangeArg, pr: flags.pr, base: flags.base, head: flags.head, direct: flags.direct, working: flags.working, staged: flags.staged },
     refresh: flags.refresh,
     noCache: flags.cache === false,
     debug: session.debug,

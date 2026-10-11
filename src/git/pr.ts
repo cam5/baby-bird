@@ -26,14 +26,19 @@ export interface ResolvedPullRequest {
   headSha: string;
   baseLabel: string;
   headLabel: string;
-  resolvedBy: 'pull-request-remote' | 'pull-request-test-merge';
-  /** Present when the code host answered. */
+  resolvedBy: 'pull-request-remote' | 'pull-request-test-merge' | 'explicit';
+  /** Present when the code host answered and the tour is of the PR against its own base. */
   pullRequest?: PullRequestInfo;
 }
 
 export interface ResolvePullRequestOptions {
   cwd: string;
   codehost: CodeHost;
+  /**
+   * Compare the PR's head against this instead of the PR's own base (`--base`): a branch on the remote
+   * (`main` or `origin/main`, read fresh from the remote), or else any local ref.
+   */
+  base?: string;
   debug?: (msg: string) => void;
   warn?: (msg: string) => void;
 }
@@ -251,6 +256,29 @@ export async function resolvePullRequest(ref: PullRequestRef, opts: ResolvePullR
 
   const headLabel = `PR #${n}`;
 
+  if (opts.base !== undefined) {
+    // The user named the base, so nothing depends on the code host; its answer only adds the PR text.
+    const name = opts.base.startsWith(`${remote.name}/`) ? opts.base.slice(remote.name.length + 1) : opts.base;
+    const tip = refs.get(`refs/heads/${name}`);
+    if (!lookup.ok) debug(`no pull request details: ${describeFailure(lookup, shortSlug)}`);
+    if (tip) {
+      debug(`--base ${opts.base}: branch ${name} on ${remote.name} is at ${tip.slice(0, 7)}`);
+      await ensureCommits(remote, [{ sha: headSha, from: headRef }, { sha: tip, from: `refs/heads/${name}` }], cwd, debug);
+      const resolved: ResolvedPullRequest = { number: n, remote: remote.name, baseSha: tip, headSha, baseLabel: `${remote.name}/${name}`, headLabel, resolvedBy: 'pull-request-remote' };
+      // The PR's description is about the PR against its own base; against another base it would mislead the model.
+      if (lookup.ok && lookup.pr.baseRefName === name) resolved.pullRequest = lookup.pr;
+      else if (lookup.ok) debug(`pull request #${n} targets ${lookup.pr.baseRefName}, not ${name}; leaving its title and description out of the prompt`);
+      return resolved;
+    }
+    const local = await git(['rev-parse', '--verify', '--quiet', `${opts.base}^{commit}`], { cwd, allowFailure: true });
+    if (local.code !== 0) {
+      throw new UsageError(`Unknown base: ${opts.base} is neither a branch on ${remote.name} nor a ref in this repository.`);
+    }
+    debug(`--base ${opts.base}: no such branch on ${remote.name}; using the local ref (${local.stdout.trim().slice(0, 7)})`);
+    await ensureCommits(remote, [{ sha: headSha, from: headRef }], cwd, debug);
+    return { number: n, remote: remote.name, baseSha: local.stdout.trim(), headSha, baseLabel: opts.base, headLabel, resolvedBy: 'explicit' };
+  }
+
   if (lookup.ok) {
     const pr = lookup.pr;
     if (!pr.baseRefName) throw new PullRequestError(`gh did not say which branch pull request #${n} targets.`);
@@ -306,7 +334,7 @@ export async function resolvePullRequest(ref: PullRequestRef, opts: ResolvePullR
     [
       `Its commits came from ${remote.name} over plain git, but the base branch is only known to GitHub's API.`,
       adviceFor(lookup, n),
-      `Or name the base yourself with a range: bb <base-branch>...${headSha.slice(0, 7)}`,
+      `Or name the base yourself: bb ${n} --base <branch>`,
     ].join('\n'),
   );
 }

@@ -70,6 +70,76 @@ describe('resolveRange explicit forms', () => {
   });
 });
 
+describe('resolveRange with --base / --head', () => {
+  /** main has moved on since feat/x forked from it, so the two-dot and three-dot comparisons differ. */
+  async function diverged() {
+    const made = await featureRepo();
+    made.repo.git('checkout', '-q', 'main');
+    const mainTip = await made.repo.commit('main third', { 'b.txt': 'bb\n' });
+    return { ...made, mainTip };
+  }
+
+  it('--base A is `bb A`, and --base A --head B is `bb A...B`', async () => {
+    const { repo, mainSha, featSha } = await diverged();
+    repo.git('checkout', '-q', 'feat/x');
+    const base = await resolveRange({ base: 'main' }, opts(repo));
+    expect(base.source).toEqual({ kind: 'range', base: 'main', head: 'HEAD', baseSha: mainSha, headSha: featSha, mergeBase: mainSha, resolvedBy: 'explicit' });
+    expect(base.source).toEqual((await resolveRange({ arg: 'main' }, opts(repo))).source);
+
+    // From another branch entirely: neither end has to be checked out.
+    repo.git('checkout', '-q', 'main');
+    const both = await resolveRange({ base: 'main', head: 'feat/x' }, opts(repo));
+    expect(both.source).toEqual({ kind: 'range', base: 'main', head: 'feat/x', baseSha: mainSha, headSha: featSha, mergeBase: mainSha, resolvedBy: 'explicit' });
+    expect(both.source).toEqual((await resolveRange({ arg: 'main...feat/x' }, opts(repo))).source);
+    const diff = await collectDiff(both.source, { cwd: repo.dir, exclude: [] });
+    expect(diff.files.map((f) => f.path)).toEqual(['a.txt', 'c.txt']);
+  });
+
+  it('--direct is `bb A..B`: the two commits as they are, including what the base gained since', async () => {
+    const { repo, mainTip, featSha } = await diverged();
+    const direct = await resolveRange({ base: 'main', head: 'feat/x', direct: true }, opts(repo));
+    expect(direct.source).toEqual({ kind: 'range', base: 'main', head: 'feat/x', baseSha: mainTip, headSha: featSha, resolvedBy: 'explicit' });
+    expect(direct.source).toEqual((await resolveRange({ arg: 'main..feat/x' }, opts(repo))).source);
+    // b.txt changed only on main; a direct comparison shows that change undone.
+    const diff = await collectDiff(direct.source, { cwd: repo.dir, exclude: [] });
+    expect(diff.files.map((f) => f.path)).toEqual(['a.txt', 'b.txt', 'c.txt']);
+  });
+
+  it('--head alone compares against the default branch', async () => {
+    const { repo, mainSha, featSha } = await diverged();
+    const r = await resolveRange({ head: 'feat/x' }, opts(repo));
+    expect(r.source).toEqual({ kind: 'range', base: 'main', head: 'feat/x', baseSha: mainSha, headSha: featSha, mergeBase: mainSha, resolvedBy: 'default-branch' });
+
+    const configured = await resolveRange({ head: 'HEAD' }, opts(repo, { defaultBranch: 'feat/x' }));
+    expect(configured.source).toMatchObject({ base: 'feat/x', head: 'HEAD', baseSha: mainSha, resolvedBy: 'default-branch' });
+
+    repo.git('checkout', '-q', 'feat/x');
+    repo.git('branch', '-D', 'main');
+    await expect(resolveRange({ head: 'feat/x' }, opts(repo))).rejects.toThrow(/Could not find a default branch to compare feat\/x against/);
+  });
+
+  it('rejects combinations that say two things, and unknown refs', async () => {
+    const { repo } = await diverged();
+    const o = opts(repo);
+    await expect(resolveRange({ arg: 'main..feat/x', base: 'main' }, o)).rejects.toThrow(/Give either a range \(main\.\.feat\/x\) or --base\/--head, not both/);
+    await expect(resolveRange({ base: 'main', staged: true }, o)).rejects.toThrow(/--base and --head cannot be combined with --staged/);
+    await expect(resolveRange({ head: 'feat/x', working: true }, o)).rejects.toThrow(UsageError);
+    await expect(resolveRange({ direct: true }, o)).rejects.toThrow(/--direct needs --base or --head/);
+    await expect(resolveRange({ arg: 'main', direct: true }, o)).rejects.toThrow(/--direct needs --base or --head/);
+    await expect(resolveRange({ base: 'nope' }, o)).rejects.toThrow(/Unknown git ref: nope/);
+    await expect(resolveRange({ base: 'main', head: 'nope' }, o)).rejects.toThrow(/Unknown git ref: nope/);
+    await expect(resolveRange({ base: 'main', head: 'main', direct: true }, o)).rejects.toThrow(NoChangesError);
+  });
+
+  it('suggests swapping when the head is already contained in the base', async () => {
+    const { repo } = await featureRepo();
+    const err = await resolveRange({ base: 'feat/x', head: 'main' }, opts(repo)).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NoChangesError);
+    expect((err as NoChangesError).message).toBe('main has no commits on top of feat/x.');
+    expect((err as NoChangesError).hint).toBe('Every commit of main is already in feat/x. If they are the wrong way round, try `--base main --head feat/x`.');
+  });
+});
+
 describe('resolveRange cascade', () => {
   it('prefers a dirty working tree', async () => {
     const { repo, featSha } = await featureRepo();
