@@ -13,6 +13,9 @@ import { openSession, terminalWidth, type GlobalFlags } from './shared.js';
 
 export interface AskFlags extends GlobalFlags {
   pr?: string;
+  base?: string;
+  head?: string;
+  direct?: boolean;
   working?: boolean;
   staged?: boolean;
   refresh?: boolean;
@@ -64,7 +67,7 @@ export async function askCommand(words: string[], flags: AskFlags): Promise<void
   }
   const llm = resolveLlm(config);
 
-  const { range, message } = await splitAskArgs(words, { cwd: session.root, rangeAllowed: !flags.working && !flags.staged && flags.pr === undefined });
+  const { range, message } = await splitAskArgs(words, { cwd: session.root, rangeAllowed: !flags.working && !flags.staged && flags.pr === undefined && flags.base === undefined && flags.head === undefined });
   session.debug(range ? `range: ${range}` : 'no range argument');
   session.debug(message ? `opening message: ${JSON.stringify(message)}` : 'no opening message');
 
@@ -77,7 +80,7 @@ export async function askCommand(words: string[], flags: AskFlags): Promise<void
     cwd: session.root,
     config,
     cacheDir: session.loaded.cacheDir,
-    range: { arg: range, pr: flags.pr, working: flags.working, staged: flags.staged },
+    range: { arg: range, pr: flags.pr, base: flags.base, head: flags.head, direct: flags.direct, working: flags.working, staged: flags.staged },
     refresh: flags.refresh,
     noCache: flags.cache === false,
     debug: session.debug,

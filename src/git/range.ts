@@ -1,6 +1,6 @@
 import type { CodeHost } from '../codehost/provider.js';
 import { NoChangesError, UsageError } from '../core/errors.js';
-import type { PullRequestInfo, TourSource } from '../core/types.js';
+import type { PullRequestInfo, RangeResolvedBy, TourSource } from '../core/types.js';
 import { currentBranch, git, isDirty, localBranches, mergeBase, revParse } from './exec.js';
 import { isBareNumber, localRefNamed, parsePullRequestArg, requirePullRequestArg, resolvePullRequest, type PullRequestRef } from './pr.js';
 
@@ -12,6 +12,15 @@ export interface RangeRequest {
   arg?: string;
   /** A pull request by number or URL, with no ref-name ambiguity (`--pr`). */
   pr?: string;
+  /**
+   * `--base`: what to compare against. With `head` (default HEAD) this is the flag spelling of
+   * `base...head`. With a pull request it replaces the PR's own base.
+   */
+  base?: string;
+  /** `--head`: the commit being toured (default HEAD). Alone, it is compared against the default branch. */
+  head?: string;
+  /** `--direct`: compare base and head exactly as they are (`base..head`) instead of from where they forked. */
+  direct?: boolean;
   working?: boolean;
   staged?: boolean;
 }
@@ -48,15 +57,27 @@ export async function resolveRange(req: RangeRequest, opts: ResolveOptions): Pro
   if ((req.working || req.staged) && req.arg) throw new UsageError(`A range argument cannot be combined with --${req.working ? 'working' : 'staged'}.`);
   if ((req.working || req.staged) && req.pr !== undefined) throw new UsageError(`--pr cannot be combined with --${req.working ? 'working' : 'staged'}.`);
   if (req.pr !== undefined && req.arg) throw new UsageError(`--pr cannot be combined with a range argument (${req.arg}).`);
+  const flagged = req.base !== undefined || req.head !== undefined;
+  if ((req.working || req.staged) && flagged) throw new UsageError(`--base and --head cannot be combined with --${req.working ? 'working' : 'staged'}.`);
+  if (req.direct && !flagged) throw new UsageError('--direct needs --base or --head: it compares those two commits exactly as they are.');
 
   if (req.staged) return { source: { kind: 'working', headSha, staged: true, resolvedBy: 'explicit' }, branch };
   if (req.working) return { source: { kind: 'working', headSha, staged: false, resolvedBy: 'explicit' }, branch };
 
-  if (req.pr !== undefined) return pullRequestRange(requirePullRequestArg(req.pr), branch, opts);
+  const named = req.pr !== undefined ? requirePullRequestArg(req.pr) : req.arg ? await pullRequestForArg(req.arg, opts) : null;
+  if (named) {
+    if (req.head !== undefined) {
+      throw new UsageError('--head cannot be combined with a pull request: the pull request is the head.', 'Use --base to compare the pull request against something other than its own base.');
+    }
+    return pullRequestRange(named, branch, req, opts);
+  }
+
+  if (flagged) {
+    if (req.arg) throw new UsageError(`Give either a range (${req.arg}) or --base/--head, not both.`);
+    return { source: await flaggedRange(req, opts), branch };
+  }
 
   if (req.arg) {
-    const pr = await pullRequestForArg(req.arg, opts);
-    if (pr) return pullRequestRange(pr, branch, opts);
     return { source: await explicitRange(req.arg, headSha, cwd), branch };
   }
 
@@ -109,7 +130,7 @@ export async function resolveRange(req: RangeRequest, opts: ResolveOptions): Pro
  * Whether a range argument names a pull request. `#12` and PR URLs always do. A bare `12` does too,
  * unless a local branch or tag is called exactly `12`: that name is something the user made here and it
  * is what `bb 12` meant before pull requests could be named, so it wins, with a note on how to get the PR.
- * (An all-digit abbreviated commit sha is not a name and does not win; write `1234567...` for that.)
+ * (An all-digit abbreviated commit sha is not a name and does not win; `--base 1234567` reaches it.)
  */
 export async function pullRequestForArg(arg: string, opts: Pick<ResolveOptions, 'cwd' | 'warn'>): Promise<PullRequestRef | null> {
   const pr = parsePullRequestArg(arg);
@@ -120,12 +141,46 @@ export async function pullRequestForArg(arg: string, opts: Pick<ResolveOptions, 
   return null;
 }
 
-async function pullRequestRange(ref: PullRequestRef, branch: string | null, opts: ResolveOptions): Promise<ResolvedRange> {
-  const pr = await resolvePullRequest(ref, { cwd: opts.cwd, codehost: opts.codehost, debug: opts.debug, warn: opts.warn });
-  const source = await rangeAtMergeBase(pr.baseSha, pr.headSha, pr.headLabel, pr.resolvedBy, opts.cwd, pr.baseLabel);
+async function pullRequestRange(ref: PullRequestRef, branch: string | null, req: RangeRequest, opts: ResolveOptions): Promise<ResolvedRange> {
+  const pr = await resolvePullRequest(ref, { cwd: opts.cwd, codehost: opts.codehost, base: req.base, debug: opts.debug, warn: opts.warn });
+  const source = req.direct
+    ? directRange(pr.baseSha, pr.baseLabel, pr.headSha, pr.headLabel, pr.resolvedBy)
+    : await rangeAtMergeBase(pr.baseSha, pr.headSha, pr.headLabel, pr.resolvedBy, opts.cwd, pr.baseLabel);
   const resolved: ResolvedRange = { source, branch };
   if (pr.pullRequest) resolved.pullRequest = pr.pullRequest;
   return resolved;
+}
+
+/** `--base A [--head B] [--direct]`: the same comparisons as `A...B` and `A..B`, without the dots. */
+async function flaggedRange(req: RangeRequest, opts: ResolveOptions): Promise<TourSource> {
+  const { cwd } = opts;
+  const head = req.head ?? 'HEAD';
+  const headSha = await requireRef(head, cwd);
+  let base = req.base;
+  let resolvedBy: RangeResolvedBy = 'explicit';
+  if (base === undefined) {
+    const detected = await detectDefaultBranch(opts.defaultBranch, cwd);
+    if (!detected) throw new UsageError(`Could not find a default branch to compare ${head} against.`, 'Say what to compare against with --base <ref>.');
+    opts.debug?.(`--head without --base: comparing against the default branch ${detected}`);
+    base = detected;
+    resolvedBy = 'default-branch';
+  }
+  if (req.direct) return directRange(await requireRef(base, cwd), base, headSha, head, resolvedBy);
+  try {
+    return await rangeAtMergeBase(base, headSha, head, resolvedBy, cwd);
+  } catch (err) {
+    // The dotted "did you mean" would send someone who chose flags back to range syntax.
+    if (err instanceof NoChangesError && req.base !== undefined) {
+      throw new NoChangesError(err.message, `Every commit of ${head} is already in ${base}. If they are the wrong way round, try \`--base ${head} --head ${base}\`.`);
+    }
+    throw err;
+  }
+}
+
+/** Two commits compared exactly as they are (two-dot semantics). */
+function directRange(baseSha: string, base: string, headSha: string, head: string, resolvedBy: RangeResolvedBy): TourSource {
+  if (baseSha === headSha) throw new NoChangesError(`${base} and ${head} point at the same commit.`);
+  return { kind: 'range', base, head, baseSha, headSha, resolvedBy };
 }
 
 async function explicitRange(arg: string, headSha: string, cwd: string): Promise<TourSource> {
@@ -141,10 +196,7 @@ async function explicitRange(arg: string, headSha: string, cwd: string): Promise
   if (two !== -1) {
     const base = arg.slice(0, two) || 'HEAD';
     const head = arg.slice(two + 2) || 'HEAD';
-    const baseSha = await requireRef(base, cwd);
-    const headResolved = await requireRef(head, cwd);
-    if (baseSha === headResolved) throw new NoChangesError(`${base} and ${head} point at the same commit.`);
-    return { kind: 'range', base, head, baseSha, headSha: headResolved, resolvedBy: 'explicit' };
+    return directRange(await requireRef(base, cwd), base, await requireRef(head, cwd), head, 'explicit');
   }
   // Bare ref: "what did HEAD add on top of <ref>" (three-dot semantics).
   return rangeAtMergeBase(arg, headSha, 'HEAD', 'explicit', cwd);
@@ -160,7 +212,7 @@ async function rangeAtMergeBase(
   base: string,
   headSha: string,
   headLabel: string,
-  resolvedBy: Extract<TourSource, { kind: 'range' }>['resolvedBy'],
+  resolvedBy: RangeResolvedBy,
   cwd: string,
   /** What to call the base when `base` is a sha rather than something the user typed. */
   baseLabel: string = base,

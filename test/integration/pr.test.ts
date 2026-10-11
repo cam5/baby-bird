@@ -147,8 +147,8 @@ describe('resolveRange for a pull request number', () => {
     expect(e.message).toMatch(/Could not work out which branch pull request #2 targets: the account gh is using cannot see/);
     expect(e.hint).toMatch(/gh auth status/);
     expect(e.hint).toMatch(/GH_TOKEN=\$\(gh auth token --user <account>\) bb 2/);
-    expect(e.hint).toContain(`bb <base-branch>...${part2.slice(0, 7)}`);
-    // The head was still fetched, so that last suggestion works as written.
+    expect(e.hint).toContain('Or name the base yourself: bb 2 --base <branch>');
+    // The head was still fetched, so that needs no second trip for it.
     expect(clone.git('cat-file', '-t', part2).trim()).toBe('commit');
 
     const missing = await resolveRange({ arg: '2' }, opts(clone, host({ ok: false, reason: 'not-installed', detail: 'gh is not installed' }))).catch((x: unknown) => x);
@@ -212,6 +212,48 @@ describe('resolveRange for a pull request number', () => {
     sink.warnings.length = 0;
     expect((await resolveRange({ arg: '2' }, opts(clone, h, sink))).source).toMatchObject({ base: '2', resolvedBy: 'explicit' });
     expect(sink.warnings[0]).toMatch(/^2 is a local tag here/);
+  });
+
+  it('--base replaces the pull request\'s own base, read fresh from the remote', async () => {
+    const { remote, clone, mainSha, part1, part2 } = await stack();
+    const sink = { warnings: [] as string[] };
+    const own = pr2({ headRefOid: part2 });
+
+    // The whole stack up to PR #2, against main. The PR's own description would no longer fit.
+    const whole = await resolveRange({ arg: '2', base: 'main' }, opts(clone, host({ ok: true, pr: own }), sink));
+    expect(whole.source).toEqual({ kind: 'range', base: 'origin/main', head: 'PR #2', baseSha: mainSha, headSha: part2, resolvedBy: 'pull-request-remote' });
+    expect(whole.pullRequest).toBeUndefined();
+    const diff = await collectDiff(whole.source, { cwd: clone.dir, exclude: [] });
+    expect(diff.files.map((f) => f.path)).toEqual(['p1.txt', 'p2.txt']);
+
+    // Naming the PR's real base keeps its title and description; origin/<name> means the same branch.
+    const same = await resolveRange({ pr: '2', base: 'origin/part-1' }, opts(clone, host({ ok: true, pr: own }), sink));
+    expect(same.source).toMatchObject({ base: 'origin/part-1', baseSha: part1, resolvedBy: 'pull-request-remote' });
+    expect(same.pullRequest).toBe(own);
+
+    // The way out when the code host cannot say what the base is: no warning, no test merge needed.
+    remote.git('update-ref', '-d', 'refs/pull/2/merge');
+    const manual = await resolveRange({ arg: '2', base: 'part-1' }, opts(clone, host(noAccess), sink));
+    expect(manual.source).toEqual({ kind: 'range', base: 'origin/part-1', head: 'PR #2', baseSha: part1, headSha: part2, resolvedBy: 'pull-request-remote' });
+    expect(sink.warnings).toEqual([]);
+
+    // Not a branch on the remote: any local ref will do.
+    clone.git('tag', 'v0', mainSha);
+    const local = await resolveRange({ arg: '2', base: 'v0' }, opts(clone, host(noAccess)));
+    expect(local.source).toEqual({ kind: 'range', base: 'v0', head: 'PR #2', baseSha: mainSha, headSha: part2, resolvedBy: 'explicit' });
+    await expect(resolveRange({ arg: '2', base: 'nope' }, opts(clone, host(noAccess)))).rejects.toThrow(/Unknown base: nope is neither a branch on origin nor a ref in this repository/);
+  });
+
+  it('--direct compares a pull request with the base tip as it is, and --head is refused', async () => {
+    const { remote, clone, part2 } = await stack();
+    remote.git('checkout', '-q', 'part-1');
+    const moved = await remote.commit('part 1 moves on', { 'p1.txt': 'p1 again\n' });
+    remote.git('checkout', '-q', 'main');
+    const h = host({ ok: true, pr: pr2() });
+    const direct = await resolveRange({ arg: '2', direct: true, base: 'part-1' }, opts(clone, h));
+    expect(direct.source).toEqual({ kind: 'range', base: 'origin/part-1', head: 'PR #2', baseSha: moved, headSha: part2, resolvedBy: 'pull-request-remote' });
+    await expect(resolveRange({ arg: '2', head: 'main' }, opts(clone, h))).rejects.toThrow(/--head cannot be combined with a pull request/);
+    await expect(resolveRange({ pr: '2', head: 'main' }, opts(clone, h))).rejects.toThrow(UsageError);
   });
 
   it('rejects contradictory requests', async () => {
